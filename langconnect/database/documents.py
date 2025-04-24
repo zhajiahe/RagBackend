@@ -1,52 +1,10 @@
-import os
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_openai import OpenAIEmbeddings  # Using OpenAI as an example
-from langchain_postgres.vectorstores import PGVector
-
-
-# --- Configuration ---
-# Construct connection string from environment variables set by docker-compose
-DB_HOST = os.getenv(
-    "POSTGRES_HOST", "localhost"
-)  # Default for local dev outside docker
-DB_PORT = os.getenv("POSTGRES_PORT", "5432")
-DB_USER = os.getenv("POSTGRES_USER", "postgres")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")  # Default for local dev
-DB_NAME = os.getenv("POSTGRES_DB", "langconnect_dev")  # Default for local dev
-
-CONNECTION_STRING = (
-    f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
-
-# Ensure OPENAI_API_KEY is set in your environment for OpenAIEmbeddings
-# You can replace OpenAIEmbeddings with your preferred embedding model
-DEFAULT_EMBEDDINGS = OpenAIEmbeddings()
-
-DEFAULT_COLLECTION_NAME = "default_collection"
-
-# --- Helper Functions ---
-
-
-def get_vectorstore(
-    collection_name: str = DEFAULT_COLLECTION_NAME,
-    embeddings: Embeddings = DEFAULT_EMBEDDINGS,
-    connection_string: str = CONNECTION_STRING,
-    # mode: str = "async", # langchain-postgres handles async based on driver in conn string
-) -> PGVector:
-    """Initializes and returns a PGVector store for a specific collection."""
-    # Consider adding error handling for connection issues
-    store = PGVector(
-        collection_name=collection_name,
-        connection=connection_string,  # Use connection string directly
-        embeddings=embeddings,
-        # use_jsonb=True # Store metadata in JSONB - should be default now
-    )
-    return store
-
+from .connection import get_vectorstore, CONNECTION_STRING
+from ..defaults import DEFAULT_EMBEDDINGS
 
 # --- Database Operations using PGVector ---
 
