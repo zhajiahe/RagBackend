@@ -3,6 +3,9 @@
 format:
 	ruff format .
 
+format-check:
+	ruff format --check .
+
 lint:
 	ruff check .
 
