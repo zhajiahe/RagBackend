@@ -1,4 +1,4 @@
-from langconnect.database.connection import get_db_connection, CONNECTION_OPTIONS
+from langconnect.database.connection import get_db_connection
 from langconnect.database.collections import (
     create_collection_in_db,
     list_collections_from_db,
@@ -16,7 +16,6 @@ from langconnect.database.documents import (
 
 __all__ = [
     "get_db_connection",
-    "CONNECTION_OPTIONS",
     "create_collection_in_db",
     "list_collections_from_db",
     "get_collection_from_db",

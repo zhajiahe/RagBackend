@@ -1,17 +1,9 @@
 import os
 import asyncpg
-from langchain_postgres.vectorstores import ConnectionOptions
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-# PgVector Configuration
-CONNECTION_OPTIONS = ConnectionOptions(
-    host=os.environ.get("POSTGRES_HOST", "localhost"),
-    port=int(os.environ.get("POSTGRES_PORT", "5432")),  # Ensure port is int
-    user=os.environ.get("POSTGRES_USER", "postgres"),
-    password=os.environ.get("POSTGRES_PASSWORD", "postgres"),
-    database=os.environ.get("POSTGRES_DB", "postgres"),
-)
+# PgVector Configuration removed - read directly from env vars
 
 _pool: asyncpg.Pool = None
 
@@ -22,11 +14,11 @@ async def get_db_pool() -> asyncpg.Pool:
     if _pool is None:
         try:
             _pool = await asyncpg.create_pool(
-                user=CONNECTION_OPTIONS.user,
-                password=CONNECTION_OPTIONS.password,
-                database=CONNECTION_OPTIONS.database,
-                host=CONNECTION_OPTIONS.host,
-                port=CONNECTION_OPTIONS.port,
+                user=os.environ.get("POSTGRES_USER", "postgres"),
+                password=os.environ.get("POSTGRES_PASSWORD", "postgres"),
+                database=os.environ.get("POSTGRES_DB", "postgres"),
+                host=os.environ.get("POSTGRES_HOST", "localhost"),
+                port=int(os.environ.get("POSTGRES_PORT", "5432")),  # Ensure port is int
                 # Add other pool options if needed, e.g., min_size, max_size
             )
             print("Database connection pool created.")
@@ -51,9 +43,3 @@ async def get_db_connection() -> AsyncGenerator[asyncpg.Connection, None]:
     pool = await get_db_pool()
     async with pool.acquire() as connection:
         yield connection
-
-
-# Keep the old function signature for compatibility if needed, but prefer the pool
-async def get_db_connection_options() -> ConnectionOptions:
-    """Get the connection options (legacy)."""
-    return CONNECTION_OPTIONS

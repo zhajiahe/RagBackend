@@ -1,7 +1,6 @@
 from typing import Dict, List
 from fastapi import APIRouter, HTTPException, Depends
-
-from langchain_postgres.vectorstores import ConnectionOptions
+import asyncpg
 
 from langconnect.models import CollectionCreate, CollectionUpdate, CollectionResponse
 from langconnect.database import (
@@ -19,7 +18,7 @@ router = APIRouter(prefix="/collections", tags=["collections"])
 @router.post("", response_model=CollectionResponse)
 async def collections_create(
     collection: CollectionCreate,
-    connection: ConnectionOptions = Depends(get_db_connection),
+    connection: asyncpg.Connection = Depends(get_db_connection),
 ):
     """Creates a new collection."""
     result = await create_collection_in_db(collection.dict(), connection)
@@ -29,14 +28,14 @@ async def collections_create(
 
 
 @router.get("", response_model=List[CollectionResponse])
-async def collections_list(connection: ConnectionOptions = Depends(get_db_connection)):
+async def collections_list(connection: asyncpg.Connection = Depends(get_db_connection)):
     """Lists all available collections."""
     return await list_collections_from_db(connection)
 
 
 @router.get("/{collection_id}", response_model=CollectionResponse)
 async def collections_get(
-    collection_id: str, connection: ConnectionOptions = Depends(get_db_connection)
+    collection_id: str, connection: asyncpg.Connection = Depends(get_db_connection)
 ):
     """Retrieves details of a specific collection."""
     collection = await get_collection_from_db(collection_id, connection)
@@ -49,7 +48,7 @@ async def collections_get(
 async def collections_update(
     collection_id: str,
     collection: CollectionUpdate,
-    connection: ConnectionOptions = Depends(get_db_connection),
+    connection: asyncpg.Connection = Depends(get_db_connection),
 ):
     """Updates/replaces an existing collection."""
     # Check if collection exists
@@ -70,7 +69,7 @@ async def collections_update(
 async def collections_partial_update(
     collection_id: str,
     collection: CollectionUpdate,
-    connection: ConnectionOptions = Depends(get_db_connection),
+    connection: asyncpg.Connection = Depends(get_db_connection),
 ):
     """Partially updates an existing collection."""
     # Check if collection exists
@@ -88,7 +87,7 @@ async def collections_partial_update(
 
 @router.delete("/{collection_id}", response_model=Dict[str, bool])
 async def collections_delete(
-    collection_id: str, connection: ConnectionOptions = Depends(get_db_connection)
+    collection_id: str, connection: asyncpg.Connection = Depends(get_db_connection)
 ):
     """Deletes a specific collection."""
     # Check if collection exists
