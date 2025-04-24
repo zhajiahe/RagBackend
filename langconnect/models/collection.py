@@ -1,6 +1,5 @@
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
-from uuid import UUID
 import datetime
 
 # =====================
@@ -8,30 +7,26 @@ import datetime
 # =====================
 
 
-class CollectionBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    # user_id will be handled separately, often from auth context
+class CollectionCreate(BaseModel):
+    """Schema for creating a new collection (only name is needed)."""
+
+    name: str = Field(..., description="The unique name of the collection.")
 
 
-class CollectionCreate(CollectionBase):
-    pass  # Inherits name, description
+class CollectionResponse(BaseModel):
+    """Schema for representing a collection from PGVector."""
 
-
-class CollectionUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-
-
-class CollectionResponse(CollectionBase):
-    id: UUID
-    user_id: UUID  # Added user_id
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    # PGVector table has uuid (UUID) and name (str)
+    # We get these from list/get db functions
+    uuid: str = Field(
+        ..., description="The unique identifier (UUID) of the collection in PGVector."
+    )
+    name: str = Field(..., description="The name of the collection.")
 
     class Config:
-        orm_mode = True  # For SQLAlchemy or similar ORMs if used later
-        from_attributes = True  # Pydantic v2 way
+        from_attributes = (
+            True  # Allows creating model from dict like {'uuid': '...', 'name': '...'}
+        )
 
 
 # =====================
@@ -47,7 +42,7 @@ class DocumentBase(BaseModel):
 
 
 class DocumentCreate(DocumentBase):
-    collection_id: UUID
+    collection_id: str
     embedding: Optional[List[float]] = (
         None  # Embedding can be added during creation or later
     )
@@ -60,8 +55,8 @@ class DocumentUpdate(BaseModel):
 
 
 class DocumentResponse(DocumentBase):
-    id: UUID
-    collection_id: UUID
+    id: str
+    collection_id: str
     embedding: Optional[List[float]] = None  # Represent embedding as list of floats
     created_at: datetime.datetime
     updated_at: datetime.datetime
@@ -69,15 +64,3 @@ class DocumentResponse(DocumentBase):
     class Config:
         orm_mode = True
         from_attributes = True  # Pydantic v2 way
-
-
-# Example of how you might represent embedding if using pgvector directly
-# class DocumentResponse(DocumentBase):
-#     id: UUID
-#     collection_id: UUID
-#     embedding: Optional[str] = None # Store as string representation from pgvector if needed
-#     created_at: datetime.datetime
-#     updated_at: datetime.datetime
-#
-#     class Config:
-#         orm_mode = True

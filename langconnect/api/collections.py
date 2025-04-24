@@ -1,103 +1,98 @@
-from typing import Dict, List
-from fastapi import APIRouter, HTTPException, Depends
-
-from langchain_postgres.vectorstores import ConnectionOptions
-
-from langconnect.models import CollectionCreate, CollectionUpdate, CollectionResponse
+from typing import List
+from fastapi import APIRouter, HTTPException, status
+from langconnect.models import CollectionCreate, CollectionResponse
 from langconnect.database import (
-    get_db_connection,
-    create_collection_in_db,
-    list_collections_from_db,
-    get_collection_from_db,
-    update_collection_in_db,
-    delete_collection_from_db,
+    create_pgvector_collection,
+    list_pgvector_collections,
+    get_pgvector_collection_details,
+    delete_pgvector_collection,
 )
 
 router = APIRouter(prefix="/collections", tags=["collections"])
 
 
-@router.post("", response_model=CollectionResponse)
+@router.post(
+    "",
+    response_model=CollectionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def collections_create(
-    collection: CollectionCreate,
-    connection: ConnectionOptions = Depends(get_db_connection),
+    collection_data: CollectionCreate,
 ):
-    """Creates a new collection."""
-    result = await create_collection_in_db(collection.dict(), connection)
-    if not result:
-        raise HTTPException(status_code=500, detail="Failed to create collection")
-    return result
+    """Creates a new PGVector collection by name."""
+    collection_name = collection_data.name
+    try:
+        existing = await get_pgvector_collection_details(collection_name)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Collection '{collection_name}' already exists.",
+            )
+        await create_pgvector_collection(collection_name)
+        created_collection = await get_pgvector_collection_details(collection_name)
+        if not created_collection:
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve collection after creation"
+            )
+        return CollectionResponse(**created_collection)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create collection '{collection_name}': {e}",
+        )
 
 
 @router.get("", response_model=List[CollectionResponse])
-async def collections_list(connection: ConnectionOptions = Depends(get_db_connection)):
-    """Lists all available collections."""
-    return await list_collections_from_db(connection)
+async def collections_list():
+    """Lists all available PGVector collections (name and UUID)."""
+    try:
+        collections = await list_pgvector_collections()
+        return [CollectionResponse(**c) for c in collections]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list collections: {e}",
+        )
 
 
-@router.get("/{collection_id}", response_model=CollectionResponse)
+@router.get("/{collection_name}", response_model=CollectionResponse)
 async def collections_get(
-    collection_id: str, connection: ConnectionOptions = Depends(get_db_connection)
+    collection_name: str,
 ):
-    """Retrieves details of a specific collection."""
-    collection = await get_collection_from_db(collection_id, connection)
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    return collection
+    """Retrieves details (name and UUID) of a specific PGVector collection."""
+    try:
+        collection = await get_pgvector_collection_details(collection_name)
+        if not collection:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection '{collection_name}' not found",
+            )
+        return CollectionResponse(**collection)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get collection '{collection_name}': {e}",
+        )
 
 
-@router.put("/{collection_id}", response_model=CollectionResponse)
-async def collections_update(
-    collection_id: str,
-    collection: CollectionUpdate,
-    connection: ConnectionOptions = Depends(get_db_connection),
-):
-    """Updates/replaces an existing collection."""
-    # Check if collection exists
-    existing = await get_collection_from_db(collection_id, connection)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Collection not found")
-
-    # Update collection
-    result = await update_collection_in_db(
-        collection_id, collection.dict(exclude_unset=True), connection
-    )
-    if not result:
-        raise HTTPException(status_code=500, detail="Failed to update collection")
-    return result
-
-
-@router.patch("/{collection_id}", response_model=CollectionResponse)
-async def collections_partial_update(
-    collection_id: str,
-    collection: CollectionUpdate,
-    connection: ConnectionOptions = Depends(get_db_connection),
-):
-    """Partially updates an existing collection."""
-    # Check if collection exists
-    existing = await get_collection_from_db(collection_id, connection)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Collection not found")
-
-    # Update only provided fields
-    update_data = collection.dict(exclude_unset=True)
-    result = await update_collection_in_db(collection_id, update_data, connection)
-    if not result:
-        raise HTTPException(status_code=500, detail="Failed to update collection")
-    return result
-
-
-@router.delete("/{collection_id}", response_model=Dict[str, bool])
+@router.delete("/{collection_name}", status_code=status.HTTP_204_NO_CONTENT)
 async def collections_delete(
-    collection_id: str, connection: ConnectionOptions = Depends(get_db_connection)
+    collection_name: str,
 ):
-    """Deletes a specific collection."""
-    # Check if collection exists
-    existing = await get_collection_from_db(collection_id, connection)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Collection not found")
+    """Deletes a specific PGVector collection by name."""
+    try:
+        existing = await get_pgvector_collection_details(collection_name)
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection '{collection_name}' not found",
+            )
 
-    # Delete collection
-    result = await delete_collection_from_db(collection_id, connection)
-    if not result:
-        raise HTTPException(status_code=500, detail="Failed to delete collection")
-    return {"success": True}
+        await delete_pgvector_collection(collection_name)
+        return
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete collection '{collection_name}': {e}",
+        )

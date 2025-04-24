@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, Query, File
 
 from langconnect.models import DocumentResponse, SearchQuery, SearchResult
 from langconnect.database import (
-    get_collection_from_db,
+    get_pgvector_collection_details,
     add_documents_to_vectorstore,
     list_documents_in_vectorstore,
     delete_documents_from_vectorstore,
@@ -21,7 +21,7 @@ async def documents_create(
 ):
     """Processes and indexes (adds) a new document file to the specified collection."""
     try:
-        collection = await get_collection_from_db(collection_id)
+        collection = await get_pgvector_collection_details(collection_id)
         if not collection:
             raise HTTPException(status_code=404, detail="Collection not found")
     except Exception as e:
@@ -68,7 +68,7 @@ async def documents_list(
 ):
     """Lists documents within a specific collection. NOTE: Uses placeholder implementation."""
     try:
-        collection = await get_collection_from_db(collection_id)
+        collection = await get_pgvector_collection_details(collection_id)
         if not collection:
             raise HTTPException(status_code=404, detail="Collection not found")
     except Exception as e:
@@ -92,7 +92,7 @@ async def documents_delete(
 ):
     """Deletes a specific document (chunk) from a collection by its vector store ID."""
     try:
-        collection = await get_collection_from_db(collection_id)
+        collection = await get_pgvector_collection_details(collection_id)
         if not collection:
             raise HTTPException(status_code=404, detail="Collection not found")
     except Exception as e:
@@ -120,7 +120,7 @@ async def documents_search(
 ):
     """Performs semantic search for documents within a specific collection."""
     try:
-        collection = await get_collection_from_db(collection_id)
+        collection = await get_pgvector_collection_details(collection_id)
         if not collection:
             raise HTTPException(status_code=404, detail="Collection not found")
     except Exception as e:

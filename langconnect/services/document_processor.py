@@ -2,7 +2,7 @@ from typing import List
 import logging
 from fastapi import UploadFile
 
-from langchain_core.documents import Document, Blob
+from langchain_core.documents.base import Blob, Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders.parsers import BS4HTMLParser, PDFMinerParser
 from langchain_community.document_loaders.parsers.generic import MimeTypeBasedParser

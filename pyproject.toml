@@ -20,7 +20,8 @@ dependencies = [
     "httpx>=0.28.1",
     "beautifulsoup4>=4.12.3",
     "pdfminer.six>=20231228",
-    "psycopg2-binary>=2.9.9",
+    "asyncpg>=0.30.0",
+    "psycopg[binary]>=3.2.6",
 ]
 
 [project.packages]
@@ -39,6 +40,3 @@ dev = [
     "langgraph-api>=0.0.28",
     "langgraph-cli>=0.1.75",
 ]
-
-[tool.hatch.scripts]
-start = "uvicorn langconnect.server:APP --host 0.0.0.0 --port 2024 --reload"

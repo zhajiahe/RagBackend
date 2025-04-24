@@ -1,44 +1,10 @@
-import os
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_openai import OpenAIEmbeddings  # Using OpenAI as an example
-from langchain_postgres.vectorstores import PGVector
-
-
-# --- Configuration ---
-# Assume connection string and API key are in environment variables
-# Format: "postgresql+psycopg://user:password@host:port/dbname"
-# Or for async: "postgresql+asyncpg://user:password@host:port/dbname"
-CONNECTION_STRING = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:password@localhost:5432/langconnect_dev",
-)
-# Ensure OPENAI_API_KEY is set in your environment for OpenAIEmbeddings
-# You can replace OpenAIEmbeddings with your preferred embedding model
-DEFAULT_EMBEDDINGS = OpenAIEmbeddings()
-
-# --- Helper Functions ---
-
-
-def get_vectorstore(
-    collection_name: str,
-    embeddings: Embeddings = DEFAULT_EMBEDDINGS,
-    connection_string: str = CONNECTION_STRING,
-    # mode: str = "async", # langchain-postgres handles async based on driver in conn string
-) -> PGVector:
-    """Initializes and returns a PGVector store for a specific collection."""
-    # Consider adding error handling for connection issues
-    store = PGVector(
-        collection_name=collection_name,
-        connection=connection_string,  # Use connection string directly
-        embeddings=embeddings,
-        # use_jsonb=True # Store metadata in JSONB - should be default now
-    )
-    return store
-
+from .connection import get_vectorstore, CONNECTION_STRING
+from ..defaults import DEFAULT_EMBEDDINGS
 
 # --- Database Operations using PGVector ---
 

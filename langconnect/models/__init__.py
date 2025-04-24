@@ -1,6 +1,5 @@
 from langconnect.models.collection import (
     CollectionCreate,
-    CollectionUpdate,
     CollectionResponse,
 )
 from langconnect.models.document import (
@@ -14,7 +13,6 @@ from langconnect.models.document import (
 
 __all__ = [
     "CollectionCreate",
-    "CollectionUpdate",
     "CollectionResponse",
     "DocumentMetadata",
     "DocumentCreate",
