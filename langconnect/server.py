@@ -1,7 +1,7 @@
 import logging
 from fastapi import FastAPI
 
-from langconnect.api import collections_router, documents_router
+from langconnect.api import collections_router, documents_router, admin_router
 from langconnect.utils import lifespan
 
 # Configure logging
@@ -23,6 +23,7 @@ APP = FastAPI(
 # Include API routers
 APP.include_router(collections_router)
 APP.include_router(documents_router)
+APP.include_router(admin_router)
 
 
 @APP.get("/health")

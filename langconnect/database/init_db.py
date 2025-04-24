@@ -1,0 +1,14 @@
+import logging
+from langconnect.database.documents import get_vectorstore
+
+logger = logging.getLogger(__name__)
+
+
+async def initialize_database():
+    """Initialize the database by creating necessary extensions and tables."""
+    logger.info("Starting database initialization...")
+
+    get_vectorstore()
+    logger.info("Document vector store tables created or already exist.")
+
+    logger.info("Database initialization complete.")

@@ -1,108 +1,74 @@
-import asyncpg
+import asyncio
 from typing import Dict, List, Optional, Any
-from uuid import UUID
-from ..models.collection import (
-    CollectionCreate,
-    CollectionUpdate,
-)
+
+from langchain_core.embeddings import Embeddings
+from langchain_postgres.vectorstores import PGVector
+
+import os
+from langchain_openai import OpenAIEmbeddings
+
 from .connection import get_db_connection
 
-
-# Helper to convert asyncpg.Record to dict, handling UUID and datetime
-def record_to_dict(record: asyncpg.Record) -> Optional[Dict[str, Any]]:
-    if record is None:
-        return None
-    return dict(record)
-
-
-# =====================
-# Collection DB Operations
-# =====================
+CONNECTION_STRING = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:password@localhost:5432/langconnect_dev",
+)
+DEFAULT_EMBEDDINGS = OpenAIEmbeddings()
 
 
-async def create_collection_in_db(collection_data: CollectionCreate) -> Dict[str, Any]:
-    """Create a new collection in the database."""
+def get_vectorstore_for_collection_management(
+    collection_name: str,
+    embeddings: Embeddings = DEFAULT_EMBEDDINGS,
+    connection_string: str = CONNECTION_STRING,
+) -> PGVector:
+    """Initializes and returns a PGVector store for managing a specific collection."""
+    store = PGVector(
+        collection_name=collection_name,
+        connection=connection_string,
+        embeddings=embeddings,
+    )
+    return store
+
+
+async def create_pgvector_collection(collection_name: str) -> None:
+    """Explicitly creates a collection using PGVector.
+    Note: This is often not necessary as adding documents implicitly creates it.
+    PGVector.create_collection is synchronous, so run in executor."""
+    store = get_vectorstore_for_collection_management(collection_name)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, store.create_collection)
+
+
+async def list_pgvector_collections() -> List[Dict[str, Any]]:
+    """Lists all collections directly from the langchain_pg_collection table."""
+    collections = []
     async with get_db_connection() as conn:
         query = """
-            INSERT INTO collections (name, description)
-            VALUES ($1, $2)
-            RETURNING id, name, description, created_at, updated_at;
-        """
-        record = await conn.fetchrow(
-            query, collection_data.name, collection_data.description
-        )
-    return record_to_dict(record)
-
-
-async def list_collections_from_db() -> List[Dict[str, Any]]:
-    """List all collections from the database."""
-    async with get_db_connection() as conn:
-        query = """
-            SELECT id, name, description, created_at, updated_at
-            FROM collections
-            ORDER BY created_at DESC;
+            SELECT uuid, name, cmetadata FROM langchain_pg_collection ORDER BY name;
         """
         records = await conn.fetch(query)
-    return [record_to_dict(r) for r in records]
+        for record in records:
+            collections.append({"uuid": str(record["uuid"]), "name": record["name"]})
+    return collections
 
 
-async def get_collection_from_db(collection_id: UUID) -> Optional[Dict[str, Any]]:
-    """Get a collection from the database by ID."""
+async def get_pgvector_collection_details(
+    collection_name: str,
+) -> Optional[Dict[str, Any]]:
+    """Gets collection details (uuid, name) from the langchain_pg_collection table."""
     async with get_db_connection() as conn:
         query = """
-            SELECT id, name, description, created_at, updated_at
-            FROM collections
-            WHERE id = $1;
+            SELECT uuid, name FROM langchain_pg_collection WHERE name = $1;
         """
-        record = await conn.fetchrow(query, collection_id)
-    return record_to_dict(record)
+        record = await conn.fetchrow(query, collection_name)
+        if record:
+            return {"uuid": str(record["uuid"]), "name": record["name"]}
+    return None
 
 
-async def update_collection_in_db(
-    collection_id: UUID, collection_data: CollectionUpdate
-) -> Optional[Dict[str, Any]]:
-    """Update a collection in the database."""
-    # Build the SET part of the query dynamically
-    update_fields = collection_data.model_dump(exclude_unset=True)
-    if not update_fields:
-        # If nothing to update, maybe fetch and return current state or raise error
-        return await get_collection_from_db(collection_id)
-
-    set_clauses = []
-    values = []
-    param_idx = 1
-    for key, value in update_fields.items():
-        set_clauses.append(f"{key} = ${param_idx}")
-        values.append(value)
-        param_idx += 1
-
-    # Always update the timestamp
-    set_clauses.append("updated_at = NOW()")
-    values.append(collection_id)
-    param_idx_id = param_idx
-
-    query = f"""
-        UPDATE collections
-        SET {", ".join(set_clauses)}
-        WHERE id = ${param_idx_id}
-        RETURNING id, name, description, created_at, updated_at;
-    """
-    async with get_db_connection() as conn:
-        record = await conn.fetchrow(query, *values)
-    return record_to_dict(record)
-
-
-async def delete_collection_from_db(collection_id: UUID) -> bool:
-    """Delete a collection (and its documents) from the database."""
-    async with get_db_connection() as conn:
-        async with conn.transaction():
-            # Optional: Delete associated documents first if FK constraint doesn't cascade
-            # await conn.execute("DELETE FROM documents WHERE collection_id = $1", collection_id)
-
-            query = """
-                DELETE FROM collections
-                WHERE id = $1;
-            """
-            status = await conn.execute(query, collection_id)
-            # status is like 'DELETE 1' or 'DELETE 0'
-            return status.split(" ")[1] == "1"
+async def delete_pgvector_collection(collection_name: str) -> None:
+    """Deletes a collection using PGVector.
+    PGVector.delete_collection is synchronous, so run in executor."""
+    store = get_vectorstore_for_collection_management(collection_name)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, store.delete_collection)
