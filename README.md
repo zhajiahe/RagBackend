@@ -13,6 +13,7 @@ LangConnect is a RAG (Retrieval-Augmented Generation) service built with FastAPI
 ### Prerequisites
 
 - Docker and Docker Compose
+- Python 3.11 or higher
 
 ### Running with Docker
 
@@ -32,8 +33,8 @@ LangConnect is a RAG (Retrieval-Augmented Generation) service built with FastAPI
    - Build and start the LangConnect API service
 
 3. Access the API:
-   - API documentation: http://localhost:2024/docs
-   - Health check: http://localhost:2024/health
+   - API documentation: http://localhost:8080/docs
+   - Health check: http://localhost:8080/health
 
 ### Development
 
@@ -45,7 +46,7 @@ docker-compose up
 
 ## API Documentation
 
-The API documentation is available at http://localhost:2024/docs when the service is running.
+The API documentation is available at http://localhost:8080/docs when the service is running.
 
 ## Environment Variables
 
@@ -62,3 +63,41 @@ The following environment variables can be configured in the `docker-compose.yml
 ## License
 
 This project is licensed under the terms of the license included in the repository.
+
+## Endpoints
+
+### Collections
+
+#### `/collections` (GET)
+
+List all collections.
+
+#### `/collections` (POST)
+
+Create a new collection.
+
+#### `/collections/{collection_id}` (GET)
+
+Get a specific collection by ID.
+
+#### `/collections/{collection_id}` (DELETE)
+
+Delete a specific collection by ID.
+
+### Documents
+
+#### `/collections/{collection_id}/documents` (GET)
+
+List all documents in a specific collection.
+
+#### `/collections/{collection_id}/documents` (POST)
+
+Create a new document in a specific collection.
+
+#### `/collections/{collection_id}/documents/{document_id}` (DELETE)
+
+Delete a specific document by ID.
+
+#### `/collections/{collection_id}/documents/search` (POST)
+
+Search for documents using semantic search.
