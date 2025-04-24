@@ -20,9 +20,7 @@ def record_to_dict(record: asyncpg.Record) -> Optional[Dict[str, Any]]:
 # =====================
 
 
-async def create_collection_in_db(
-    collection_data: CollectionCreate
-) -> Dict[str, Any]:
+async def create_collection_in_db(collection_data: CollectionCreate) -> Dict[str, Any]:
     """Create a new collection in the database."""
     async with get_db_connection() as conn:
         query = """
@@ -48,9 +46,7 @@ async def list_collections_from_db() -> List[Dict[str, Any]]:
     return [record_to_dict(r) for r in records]
 
 
-async def get_collection_from_db(
-    collection_id: UUID
-) -> Optional[Dict[str, Any]]:
+async def get_collection_from_db(collection_id: UUID) -> Optional[Dict[str, Any]]:
     """Get a collection from the database by ID."""
     async with get_db_connection() as conn:
         query = """
