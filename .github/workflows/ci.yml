@@ -20,7 +20,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.x' # Or specify your project's Python version
+        python-version: '3.11' # Or specify your project's Python version
 
     - name: Install dependencies
       run: |
@@ -30,7 +30,7 @@ jobs:
         # install them here, e.g., pip install -r requirements.txt or pip install .
 
     - name: Check formatting
-      run: make format
+      run: make format-check
 
   lint:
     runs-on: ubuntu-latest
@@ -41,7 +41,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.x' # Or specify your project's Python version
+        python-version: '3.11' # Or specify your project's Python version
 
     - name: Install dependencies
       run: |
