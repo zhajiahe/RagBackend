@@ -1,68 +1,34 @@
-import asyncio
 import logging
-from contextlib import asynccontextmanager
+from fastapi import FastAPI
 
-from fastapi import FastAPI, Request
+from langconnect.api import collections_router, documents_router
+from langconnect.utils import lifespan
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 LOGGER = logging.getLogger(__name__)
 
-TASK_QUEUE: asyncio.Queue = asyncio.Queue()
+# Initialize FastAPI app
+APP = FastAPI(
+    title="LangConnect API",
+    description="A REST API for a RAG system using FastAPI and LangChain",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# Include API routers
+APP.include_router(collections_router)
+APP.include_router(documents_router)
 
 
-async def worker():
-    LOGGER.info("Background worker started.")
-    while True:
-        try:
-            task = await TASK_QUEUE.get()
-            if not task:
-                LOGGER.info("Worker received sentinel, exiting.")
-                break
-
-            LOGGER.info(f"Worker got a new task: {task}")
-            await _process_task(task)
-        except Exception as exc:
-            LOGGER.exception(f"Error in worker: {exc}")
-        finally:
-            TASK_QUEUE.task_done()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    LOGGER.info("App is starting up. Creating background worker...")
-    loop = asyncio.get_running_loop()
-    loop.create_task(worker())
-    yield
-    LOGGER.info("App is shutting down. Stopping background worker...")
-    TASK_QUEUE.put_nowait(None)
-
-
-APP = FastAPI(lifespan=lifespan)
-
-
-@APP.post("/rag/index")
-async def rag_index(req: Request):
-    # Get the request body as JSON
-    body = await req.json()
-
-    LOGGER.info(f"Received request: {body}")
-    return {"status": "success"}
-
-
-@APP.delete("/rag/delete")
-async def rag_delete(req: Request):
-    # Get the request body as JSON
-    body = await req.json()
-
-    LOGGER.info(f"Received request: {body}")
-    return {"status": "success"}
-
-@APP.get("/rag/search")
-async def rag_search(req: Request):
-    # Get the request parameters3
-    params = req.query_params
-
-    LOGGER.info(f"Received request: {params}")
-    return {"status": "success"}
+@APP.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
