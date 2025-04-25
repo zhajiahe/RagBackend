@@ -1,98 +1,162 @@
-from typing import Dict, List, Optional, Any
-from uuid import UUID
+import json
+import uuid
+from typing import Any, Dict, List, Optional
 
+import asyncpg
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from .connection import get_vectorstore, CONNECTION_STRING
+
+from langconnect.database.connection import (
+    get_vectorstore,
+    get_db_connection,
+    CONNECTION_STRING,
+    ASYNC_CONNECTION_STRING,
+)
 from ..defaults import DEFAULT_EMBEDDINGS
 
 # --- Database Operations using PGVector ---
 
 
-async def add_documents_to_vectorstore(
-    collection_id: str,  # Use collection_id as the collection_name
+def add_documents_to_vectorstore(
+    collection_name: str,
     documents: List[Document],
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
     connection_string: str = CONNECTION_STRING,
 ) -> List[str]:
     """Adds LangChain documents to the specified PGVector collection."""
     store = get_vectorstore(
-        collection_name=collection_id,
+        collection_name=collection_name,
         embeddings=embeddings,
         connection_string=connection_string,
     )
-    # Use aadd_documents for async operation
-    # PGVector handles collection creation implicitly on first add
-    added_ids = await store.aadd_documents(
-        documents, ids=None
-    )  # Let PGVector generate IDs
+    added_ids = store.add_documents(documents, ids=None)  # Let PGVector generate IDs
     return added_ids
 
 
 async def list_documents_in_vectorstore(
-    collection_id: str,
+    collection_name: str,
     limit: int = 10,
     offset: int = 0,
-    connection_string: str = CONNECTION_STRING,
+    connection_string: str = ASYNC_CONNECTION_STRING,
 ) -> List[Dict[str, Any]]:
     """
     Lists documents (metadata and content) from the vector store's underlying table.
     NOTE: This bypasses LangChain's abstraction for simple listing/pagination.
     Requires direct asyncpg connection to query langchain_pg_embedding table.
-    THIS IS A PLACEHOLDER - Needs implementation using direct DB access.
     """
-    # This implementation requires direct SQL and knowledge of PGVector's schema.
-    # It's less ideal than a built-in LangChain method but necessary for pagination.
-    # We need the actual UUID PGVector uses for the collection.
+    documents = []
+    try:
+        async with get_db_connection() as conn:
+            # 1. Get collection UUID from langchain_pg_collection where name = collection_name
+            collection_record = await conn.fetchrow(
+                "SELECT uuid FROM langchain_pg_collection WHERE name = $1",
+                collection_name,
+            )
+            if not collection_record:
+                print(f"Warning: Collection '{collection_name}' not found.")
+                return []  # Collection doesn't exist
 
-    # TODO: Implement direct asyncpg query for listing/pagination
-    # Example (Conceptual - requires asyncpg setup like in connection.py):
-    # async with get_db_connection(connection_string) as conn:
-    #     # 1. Get collection UUID from langchain_pg_collection where name = collection_id
-    #     # 2. Query langchain_pg_embedding table with collection_uuid, limit, offset
-    #     query = """
-    #         SELECT uuid, document, cmetadata FROM langchain_pg_embedding
-    #         WHERE collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = $1)
-    #         ORDER BY uuid -- Or another field if needed
-    #         LIMIT $2 OFFSET $3;
-    #     """
-    #     records = await conn.fetch(query, collection_id, limit, offset)
-    #     # Format records into list of dicts matching DocumentResponse structure (ID, content, metadata)
-    #     # return formatted_records
-    print(
-        f"Warning: list_documents_in_vectorstore (collection: {collection_id}) not fully implemented. Returning empty list."
-    )
-    return []  # Placeholder
+            collection_uuid = collection_record["uuid"]
+
+            # 2. Query langchain_pg_embedding table with collection_uuid, limit, offset
+            query = """
+                SELECT id, document, cmetadata FROM langchain_pg_embedding
+                WHERE collection_id = $1
+                ORDER BY id -- Or another field if needed for consistent ordering
+                LIMIT $2 OFFSET $3;
+            """
+            records = await conn.fetch(query, collection_uuid, limit, offset)
+
+            # Format records into list of dicts
+            for record in records:
+                try:
+                    metadata_dict = (
+                        json.loads(record["cmetadata"]) if record["cmetadata"] else {}
+                    )
+                except json.JSONDecodeError:
+                    # Handle cases where cmetadata might not be valid JSON
+                    # Or log a warning and assign a default
+                    metadata_dict = {"error": "Failed to parse metadata"}
+                    print(
+                        f"Warning: Could not parse metadata for document ID {record['id']}: {record['cmetadata']}"
+                    )
+
+                documents.append(
+                    {
+                        "id": str(record["id"]),
+                        "content": record["document"],
+                        "metadata": metadata_dict,
+                        "collection_id": str(collection_uuid),
+                    }
+                )
+    except asyncpg.exceptions.UndefinedTableError:
+        # Specifically handle if the table doesn't exist (e.g., first run)
+        print(
+            f"Warning: Table langchain_pg_embedding or langchain_pg_collection not found for collection '{collection_name}'. Returning empty list."
+        )
+        return []  # Return empty list as if collection/table not found
+    except Exception as e:
+        # TODO: Add proper logging
+        print(f"Error listing documents from vector store: {e}")
+        # Depending on requirements, you might want to raise the exception
+        # or return an empty list/error indicator.
+        return []
+
+    return documents
 
 
 async def get_document_from_vectorstore(
-    collection_id: str,
+    collection_name: str,  # Keep for potential future use/consistency, though not strictly needed if ID is unique
     document_id: str,  # This should be the UUID string generated by PGVector
-    connection_string: str = CONNECTION_STRING,
+    connection_string: str = ASYNC_CONNECTION_STRING,
 ) -> Optional[Dict[str, Any]]:
     """
     Gets a single document by its ID from the vector store's underlying table.
-    Similar to list_documents, requires direct SQL.
-    THIS IS A PLACEHOLDER - Needs implementation using direct DB access.
+    Requires direct SQL access.
     """
-    # TODO: Implement direct asyncpg query for getting a single document by ID
-    # Example (Conceptual):
-    # async with get_db_connection(connection_string) as conn:
-    #     query = """
-    #         SELECT uuid, document, cmetadata FROM langchain_pg_embedding
-    #         WHERE uuid = $1;
-    #     """
-    #     record = await conn.fetchrow(query, UUID(document_id))
-    #     # Format record into dict matching DocumentResponse structure
-    #     # return formatted_record if record else None
-    print(
-        f"Warning: get_document_from_vectorstore (collection: {collection_id}, doc: {document_id}) not fully implemented. Returning None."
-    )
-    return None  # Placeholder
+    try:
+        doc_uuid = uuid.UUID(document_id)  # Validate and convert string to UUID
+    except ValueError:
+        print(f"Error: Invalid document ID format: {document_id}")
+        return None
+
+    try:
+        async with get_db_connection(connection_string) as conn:
+            # We can query directly by embedding UUID, assuming it's unique across collections
+            # If you need to ensure it's within a specific collection, uncomment the collection check
+            # collection_record = await conn.fetchrow(
+            #     "SELECT uuid FROM langchain_pg_collection WHERE name = $1",
+            #     collection_name,
+            # )
+            # if not collection_record:
+            #     print(f"Warning: Collection '{collection_name}' not found.")
+            #     return None
+            # collection_uuid = collection_record["uuid"]
+
+            query = """
+                SELECT uuid, document, cmetadata FROM langchain_pg_embedding
+                WHERE uuid = $1 -- AND collection_id = $2 -- If strict collection check needed
+            """
+            # record = await conn.fetchrow(query, doc_uuid, collection_uuid) # If strict collection check
+            record = await conn.fetchrow(query, doc_uuid)
+
+            if record:
+                return {
+                    "id": str(record["uuid"]),
+                    "content": record["document"],
+                    "metadata": record["cmetadata"],
+                }
+            else:
+                return None
+    except Exception as e:
+        # TODO: Add proper logging
+        print(f"Error getting document {document_id} from vector store: {e}")
+        # Depending on requirements, you might want to raise the exception
+        return None
 
 
-async def delete_documents_from_vectorstore(
-    collection_id: str,
+def delete_documents_from_vectorstore(
+    collection_name: str,
     document_ids: List[str],  # List of UUID strings generated by PGVector
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
     connection_string: str = CONNECTION_STRING,
@@ -101,24 +165,24 @@ async def delete_documents_from_vectorstore(
     if not document_ids:
         return True  # Nothing to delete
     store = get_vectorstore(
-        collection_name=collection_id,
+        collection_name=collection_name,
         embeddings=embeddings,
         connection_string=connection_string,
     )
-    # Use adelete for async operation
+
     try:
-        await store.adelete(ids=document_ids)
+        store.delete(ids=document_ids)
         return True
     except Exception as e:
         # Log error appropriately
         print(
-            f"Error deleting documents {document_ids} from collection {collection_id}: {e}"
+            f"Error deleting documents {document_ids} from collection {collection_name}: {e}"
         )
         return False
 
 
-async def search_documents_in_vectorstore(
-    collection_id: str,
+def search_documents_in_vectorstore(
+    collection_name: str,
     query: str,
     limit: int = 4,  # 'k' for similarity search
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
@@ -126,13 +190,12 @@ async def search_documents_in_vectorstore(
 ) -> List[Dict[str, Any]]:
     """Performs semantic similarity search within the specified PGVector collection."""
     store = get_vectorstore(
-        collection_name=collection_id,
+        collection_name=collection_name,
         embeddings=embeddings,
         connection_string=connection_string,
     )
-    # Use asimilarity_search_with_score for async operation and include scores
-    # You can also use asimilarity_search if scores are not needed
-    results_with_scores = await store.asimilarity_search_with_score(query, k=limit)
+
+    results_with_scores = store.similarity_search_with_score(query, k=limit)
 
     # Format results to match the expected SearchResult structure (content, metadata, score)
     formatted_results = []
@@ -158,7 +221,7 @@ def record_to_dict(record) -> Optional[Dict[str, Any]]:
         return None
     # Convert UUIDs to strings and handle potential 'embedding' field if fetched
     return {
-        key: (str(value) if isinstance(value, UUID) else value)
+        key: (str(value) if isinstance(value, uuid.UUID) else value)
         for key, value in record.items()
         if key != "embedding"
     }  # Exclude raw embedding vector

@@ -15,7 +15,7 @@ async def process_task(task):
     """Process a task from the queue."""
     task_type = task.get("type")
     if task_type == "index_document":
-        await index_document(task.get("collection_id"), task.get("document_data"))
+        await index_document(task.get("collection_name"), task.get("document_data"))
     # Add other task types as needed
     LOGGER.info(f"Processed task: {task}")
 

@@ -1,5 +1,6 @@
 import logging
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from langconnect.api import collections_router, documents_router, admin_router
 from langconnect.utils import lifespan
@@ -18,6 +19,15 @@ APP = FastAPI(
     description="A REST API for a RAG system using FastAPI and LangChain",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# Add CORS middleware
+APP.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include API routers
