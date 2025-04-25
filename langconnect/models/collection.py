@@ -37,8 +37,6 @@ class CollectionResponse(BaseModel):
 class DocumentBase(BaseModel):
     page_content: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    # collection_id is needed but often passed separately or inferred
-    # embedding might be generated later
 
 
 class DocumentCreate(DocumentBase):

@@ -23,6 +23,9 @@ DB_NAME = os.getenv("POSTGRES_DB", "langconnect_dev")  # Default for local dev
 CONNECTION_STRING = (
     f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
+ASYNC_CONNECTION_STRING = (
+    f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
 
 # --- Helper Functions ---
 
@@ -73,9 +76,10 @@ def get_vectorstore(
     """Initializes and returns a PGVector store for a specific collection."""
     # Consider adding error handling for connection issues
     store = PGVector(
+        embeddings,
         collection_name=collection_name,
         connection=connection_string,  # Use connection string directly
-        embeddings=embeddings,
+        async_mode=connection_string == ASYNC_CONNECTION_STRING,
         # use_jsonb=True # Store metadata in JSONB - should be default now
     )
     return store

@@ -1,29 +1,22 @@
 from typing import Dict, Optional, Any
-from pydantic import BaseModel, Field
-
-
-class DocumentMetadata(BaseModel):
-    title: Optional[str] = None
-    source: Optional[str] = None
-    author: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+from pydantic import BaseModel
 
 
 class DocumentCreate(BaseModel):
     content: Optional[str] = None
-    metadata: Optional[DocumentMetadata] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class DocumentUpdate(BaseModel):
     content: Optional[str] = None
-    metadata: Optional[DocumentMetadata] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class DocumentResponse(BaseModel):
     id: str
     collection_id: str
     content: Optional[str] = None
-    metadata: Optional[DocumentMetadata] = None
+    metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -38,6 +31,6 @@ class SearchResult(BaseModel):
     id: str
     collection_id: str
     content: Optional[str] = None
-    metadata: Optional[DocumentMetadata] = None
+    metadata: Optional[Dict[str, Any]] = None
     similarity: float
     created_at: Optional[str] = None
