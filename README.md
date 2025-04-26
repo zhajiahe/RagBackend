@@ -22,7 +22,7 @@ LangConnect is a RAG (Retrieval-Augmented Generation) service built with FastAPI
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/langconnect.git
+   git clone https://github.com/langchain-ai/langconnect.git
    cd langconnect
    ```
 
