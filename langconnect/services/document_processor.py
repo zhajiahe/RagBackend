@@ -53,6 +53,18 @@ async def process_document(
 
     # Split documents
     split_docs = TEXT_SPLITTER.split_documents(docs)
+
+    # If a single parsed doc was split into multiple, update the name metadata
+    # Check if the original parse resulted in a single doc and it was split
+    if len(docs) == 1 and len(split_docs) > 1:
+        original_name = docs[0].metadata.get("name") if hasattr(docs[0], "metadata") and isinstance(docs[0].metadata, dict) else None
+        if original_name:
+            for i, split_doc in enumerate(split_docs):
+                 # Ensure metadata attribute exists and is a dict before updating
+                 if not hasattr(split_doc, "metadata") or not isinstance(split_doc.metadata, dict):
+                     split_doc.metadata = {} # Initialize if it doesn't exist
+                 split_doc.metadata["name"] = f"{i+1}-{original_name}"
+
     return split_docs
 
 
