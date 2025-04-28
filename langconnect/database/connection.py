@@ -5,7 +5,6 @@ from typing import AsyncGenerator, Optional
 
 from langchain_core.embeddings import Embeddings
 from langchain_postgres.vectorstores import PGVector
-from langchain_openai import OpenAIEmbeddings
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ..defaults import DEFAULT_EMBEDDINGS, DEFAULT_COLLECTION_NAME
@@ -67,9 +66,7 @@ def get_vectorstore_engine(
     dbname: str = POSTGRES_DB,
 ) -> AsyncEngine:
     """Creates and returns an async SQLAlchemy engine for PostgreSQL."""
-    connection_string = (
-        f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
-    )
+    connection_string = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
     # Use pool_size=1 for simplicity in async context, adjust as needed
     engine = create_async_engine(connection_string, pool_size=1, max_overflow=0)
     return engine
@@ -92,6 +89,6 @@ def get_vectorstore(
         embeddings=embeddings,
         collection_name=collection_name,
         connection=engine,  # Pass the engine directly
-        use_jsonb=True, # Recommended for metadata
+        use_jsonb=True,  # Recommended for metadata
     )
     return store
