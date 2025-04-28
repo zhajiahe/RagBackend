@@ -75,6 +75,7 @@ def get_vectorstore_engine(
 
 DBConnection = Union[sqlalchemy.engine.Engine, str]
 
+
 def get_vectorstore(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
