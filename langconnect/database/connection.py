@@ -1,11 +1,13 @@
 import os
 import asyncpg
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 
+import sqlalchemy
 from langchain_core.embeddings import Embeddings
 from langchain_postgres.vectorstores import PGVector
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import create_engine, Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ..defaults import DEFAULT_EMBEDDINGS, DEFAULT_COLLECTION_NAME
 
@@ -19,7 +21,7 @@ _pool: asyncpg.Pool = None
 
 
 async def get_db_pool() -> asyncpg.Pool:
-    """Get the asyncpg connection pool."""
+    """Get the pg connection pool."""
     global _pool
     if _pool is None:
         try:
@@ -39,7 +41,7 @@ async def get_db_pool() -> asyncpg.Pool:
 
 
 async def close_db_pool():
-    """Close the asyncpg connection pool."""
+    """Close the pg connection pool."""
     global _pool
     if _pool:
         await _pool.close()
@@ -64,31 +66,32 @@ def get_vectorstore_engine(
     user: str = POSTGRES_USER,
     password: str = POSTGRES_PASSWORD,
     dbname: str = POSTGRES_DB,
-) -> AsyncEngine:
-    """Creates and returns an async SQLAlchemy engine for PostgreSQL."""
-    connection_string = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
-    # Use pool_size=1 for simplicity in async context, adjust as needed
-    engine = create_async_engine(connection_string, pool_size=1, max_overflow=0)
+) -> Engine:
+    """Creates and returns a sync SQLAlchemy engine for PostgreSQL."""
+    connection_string = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
+    engine = create_engine(connection_string)
     return engine
+
+
+DBConnection = Union[sqlalchemy.engine.Engine, str]
 
 
 def get_vectorstore(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
-    engine: Optional[AsyncEngine] = None,
+    engine: Optional[Union[DBConnection, Engine, AsyncEngine]] = None,
 ) -> PGVector:
     """
     Initializes and returns a PGVector store for a specific collection,
-    using an existing AsyncEngine or creating one from connection parameters.
+    using an existing engine or creating one from connection parameters.
     """
     if engine is None:
         engine = get_vectorstore_engine()
 
-    # PGVector uses the provided AsyncEngine
     store = PGVector(
         embeddings=embeddings,
         collection_name=collection_name,
-        connection=engine,  # Pass the engine directly
-        use_jsonb=True,  # Recommended for metadata
+        connection=engine,
+        use_jsonb=True,
     )
     return store
