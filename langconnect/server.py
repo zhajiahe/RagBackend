@@ -16,7 +16,7 @@ logging.basicConfig(
 LOGGER = logging.getLogger(__name__)
 
 # Read allowed origins from environment variable
-ALLOW_ORIGINS_JSON = os.getenv("ALLOW_ORIGINS", '["http://localhost:3000"]')
+ALLOW_ORIGINS_JSON = os.getenv("ALLOW_ORIGINS")
 try:
     ALLOWED_ORIGINS = json.loads(ALLOW_ORIGINS_JSON)
 except json.JSONDecodeError:
@@ -31,7 +31,6 @@ APP = FastAPI(
     lifespan=lifespan,
 )
 
-print(f"ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
 # Add CORS middleware
 APP.add_middleware(
     CORSMiddleware,
