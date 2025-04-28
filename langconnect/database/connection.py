@@ -2,30 +2,54 @@ import os
 import asyncpg
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+from urllib.parse import urlparse, urlunparse
+
 from langchain_postgres.vectorstores import PGVector
 from langchain_core.embeddings import Embeddings
 from ..defaults import DEFAULT_EMBEDDINGS, DEFAULT_COLLECTION_NAME
 
-# PgVector Configuration removed - read directly from env vars
-
 _pool: asyncpg.Pool = None
 
 # --- Configuration ---
-# Construct connection string from environment variables set by docker-compose
-DB_HOST = os.getenv(
-    "POSTGRES_HOST", "localhost"
-)  # Default for local dev outside docker
-DB_PORT = os.getenv("POSTGRES_PORT", "5432")
-DB_USER = os.getenv("POSTGRES_USER", "postgres")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")  # Default for local dev
-DB_NAME = os.getenv("POSTGRES_DB", "langconnect_dev")  # Default for local dev
+POSTGRES_URL = os.getenv("POSTGRES_URL")
+ASYNC_PG_DSN: str
+SQLALCHEMY_ASYNC_CONN_STR: str
 
-CONNECTION_STRING = (
-    f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
-ASYNC_CONNECTION_STRING = (
-    f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+if POSTGRES_URL:
+    # Use POSTGRES_URL if available
+    print(f"Using POSTGRES_URL: {POSTGRES_URL}")
+    ASYNC_PG_DSN = POSTGRES_URL
+
+    # Derive SQLAlchemy-style async connection string from POSTGRES_URL
+    parsed_url = urlparse(POSTGRES_URL)
+    if parsed_url.scheme not in ("postgresql", "postgres"):
+        # asyncpg might handle 'postgres', but SQLAlchemy needs 'postgresql+driver'
+        # For consistency, we'll require 'postgresql' if POSTGRES_URL is set.
+        raise ValueError(
+            f"POSTGRES_URL must start with 'postgresql://' or 'postgres://', found: {parsed_url.scheme}"
+        )
+    sql_alchemy_url_parts = list(parsed_url)
+    # Ensure scheme is 'postgresql+asyncpg' for SQLAlchemy
+    sql_alchemy_url_parts[0] = "postgresql+asyncpg"
+    SQLALCHEMY_ASYNC_CONN_STR = urlunparse(sql_alchemy_url_parts)
+
+else:
+    # Fallback to individual environment variables (original logic)
+    print(
+        "POSTGRES_URL not set, constructing connection strings from individual variables."
+    )
+    DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
+    DB_PORT = os.getenv("POSTGRES_PORT", "5432")
+    DB_USER = os.getenv("POSTGRES_USER", "postgres")
+    DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
+    DB_NAME = os.getenv("POSTGRES_DB", "langconnect_dev")
+
+    # Construct DSN for asyncpg (needs postgres:// scheme)
+    ASYNC_PG_DSN = f"postgres://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    # Construct SQLAlchemy-style async connection string (needs postgresql+asyncpg://)
+    SQLALCHEMY_ASYNC_CONN_STR = (
+        f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
 
 # --- Helper Functions ---
 
@@ -35,12 +59,9 @@ async def get_db_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         try:
+            # Use the determined DSN string for asyncpg
             _pool = await asyncpg.create_pool(
-                user=DB_USER,
-                password=DB_PASSWORD,
-                database=DB_NAME,
-                host=DB_HOST,
-                port=int(DB_PORT),  # Ensure port is int
+                dsn=ASYNC_PG_DSN,
                 # Add other pool options if needed, e.g., min_size, max_size
             )
             print("Database connection pool created.")
@@ -70,16 +91,14 @@ async def get_db_connection() -> AsyncGenerator[asyncpg.Connection, None]:
 def get_vectorstore(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
-    connection_string: str = CONNECTION_STRING,
-    # mode: str = "async", # langchain-postgres handles async based on driver in conn string
+    # Use the determined SQLAlchemy-style async connection string
+    connection_string: str = SQLALCHEMY_ASYNC_CONN_STR,
 ) -> PGVector:
     """Initializes and returns a PGVector store for a specific collection."""
-    # Consider adding error handling for connection issues
+    # PGVector infers async mode from 'postgresql+asyncpg' driver in connection string
     store = PGVector(
         embeddings,
         collection_name=collection_name,
-        connection=connection_string,  # Use connection string directly
-        async_mode=connection_string == ASYNC_CONNECTION_STRING,
-        # use_jsonb=True # Store metadata in JSONB - should be default now
+        connection=connection_string,
     )
     return store
