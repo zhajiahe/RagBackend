@@ -1,4 +1,6 @@
 import logging
+import os
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +15,14 @@ logging.basicConfig(
 
 LOGGER = logging.getLogger(__name__)
 
+# Read allowed origins from environment variable
+ALLOW_ORIGINS_JSON = os.getenv("ALLOW_ORIGINS", '["http://localhost:3000"]')
+try:
+    ALLOWED_ORIGINS = json.loads(ALLOW_ORIGINS_JSON)
+except json.JSONDecodeError:
+    LOGGER.error(f"Failed to parse ALLOW_ORIGINS: {ALLOW_ORIGINS_JSON}. Using default.")
+    ALLOWED_ORIGINS = ["http://localhost:3000"]
+
 # Initialize FastAPI app
 APP = FastAPI(
     title="LangConnect API",
@@ -21,10 +31,11 @@ APP = FastAPI(
     lifespan=lifespan,
 )
 
+print(f"ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
 # Add CORS middleware
 APP.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
