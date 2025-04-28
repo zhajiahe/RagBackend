@@ -1,33 +1,21 @@
 import os
 import asyncpg
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-from langchain_postgres.vectorstores import PGVector
+from typing import AsyncGenerator, Optional
+
 from langchain_core.embeddings import Embeddings
+from langchain_postgres.vectorstores import PGVector
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
 from ..defaults import DEFAULT_EMBEDDINGS, DEFAULT_COLLECTION_NAME
 
-# PgVector Configuration removed - read directly from env vars
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_DB = os.getenv("POSTGRES_DB")
 
 _pool: asyncpg.Pool = None
-
-# --- Configuration ---
-# Construct connection string from environment variables set by docker-compose
-DB_HOST = os.getenv(
-    "POSTGRES_HOST", "localhost"
-)  # Default for local dev outside docker
-DB_PORT = os.getenv("POSTGRES_PORT", "5432")
-DB_USER = os.getenv("POSTGRES_USER", "postgres")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")  # Default for local dev
-DB_NAME = os.getenv("POSTGRES_DB", "langconnect_dev")  # Default for local dev
-
-CONNECTION_STRING = (
-    f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
-ASYNC_CONNECTION_STRING = (
-    f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
-
-# --- Helper Functions ---
 
 
 async def get_db_pool() -> asyncpg.Pool:
@@ -35,15 +23,15 @@ async def get_db_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         try:
+            # Use parsed components for asyncpg connection
             _pool = await asyncpg.create_pool(
-                user=DB_USER,
-                password=DB_PASSWORD,
-                database=DB_NAME,
-                host=DB_HOST,
-                port=int(DB_PORT),  # Ensure port is int
-                # Add other pool options if needed, e.g., min_size, max_size
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD,
+                host=POSTGRES_HOST,
+                port=POSTGRES_PORT,
+                database=POSTGRES_DB,
             )
-            print("Database connection pool created.")
+            print("Database connection pool created using parsed URL components.")
         except Exception as e:
             print(f"Error creating database connection pool: {e}")
             raise
@@ -63,23 +51,44 @@ async def close_db_pool():
 async def get_db_connection() -> AsyncGenerator[asyncpg.Connection, None]:
     """Get a connection from the pool."""
     pool = await get_db_pool()
-    async with pool.acquire() as connection:
-        yield connection
+    async with pool.acquire() as conn:
+        try:
+            yield conn
+        finally:
+            await conn.close()
+
+
+def get_vectorstore_engine(
+    host: str = POSTGRES_HOST,
+    port: str = POSTGRES_PORT,
+    user: str = POSTGRES_USER,
+    password: str = POSTGRES_PASSWORD,
+    dbname: str = POSTGRES_DB,
+) -> AsyncEngine:
+    """Creates and returns an async SQLAlchemy engine for PostgreSQL."""
+    connection_string = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
+    # Use pool_size=1 for simplicity in async context, adjust as needed
+    engine = create_async_engine(connection_string, pool_size=1, max_overflow=0)
+    return engine
 
 
 def get_vectorstore(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
-    connection_string: str = CONNECTION_STRING,
-    # mode: str = "async", # langchain-postgres handles async based on driver in conn string
+    engine: Optional[AsyncEngine] = None,
 ) -> PGVector:
-    """Initializes and returns a PGVector store for a specific collection."""
-    # Consider adding error handling for connection issues
+    """
+    Initializes and returns a PGVector store for a specific collection,
+    using an existing AsyncEngine or creating one from connection parameters.
+    """
+    if engine is None:
+        engine = get_vectorstore_engine()
+
+    # PGVector uses the provided AsyncEngine
     store = PGVector(
-        embeddings,
+        embeddings=embeddings,
         collection_name=collection_name,
-        connection=connection_string,  # Use connection string directly
-        async_mode=connection_string == ASYNC_CONNECTION_STRING,
-        # use_jsonb=True # Store metadata in JSONB - should be default now
+        connection=engine,  # Pass the engine directly
+        use_jsonb=True,  # Recommended for metadata
     )
     return store
