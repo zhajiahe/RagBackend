@@ -157,9 +157,7 @@ async def documents_delete(
     document_id: str,
 ):
     """Deletes a specific document (chunk) from a collection by its vector store ID."""
-    success = await delete_documents_from_vectorstore(
-        collection_name, [document_id]
-    )
+    success = await delete_documents_from_vectorstore(collection_name, [document_id])
     if not success:
         raise HTTPException(
             status_code=500, detail="Failed to delete document from vector store"
