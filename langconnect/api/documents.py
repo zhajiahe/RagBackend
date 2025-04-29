@@ -152,13 +152,13 @@ async def documents_list(
     "/collections/{collection_name}/documents/{document_id}",
     response_model=Dict[str, bool],
 )
-def documents_delete(
+async def documents_delete(
     collection_name: str,
     document_id: str,
 ):
     """Deletes a specific document (chunk) from a collection by its vector store ID."""
-    success = delete_documents_from_vectorstore(
-        collection_name, document_ids=[document_id]
+    success = await delete_documents_from_vectorstore(
+        collection_name, [document_id]
     )
     if not success:
         raise HTTPException(
