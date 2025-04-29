@@ -1,5 +1,6 @@
 from typing import List, Optional
 import logging
+import uuid
 from fastapi import UploadFile
 
 from langchain_core.documents.base import Blob, Document
@@ -37,6 +38,9 @@ async def process_document(
     file: UploadFile, metadata: Optional[dict] = None
 ) -> List[Document]:
     """Process an uploaded file into LangChain documents."""
+    # Generate a unique ID for this file processing instance
+    file_id = uuid.uuid4()
+
     contents = await file.read()
     blob = Blob(data=contents, mimetype=file.content_type or "text/plain")
 
@@ -54,22 +58,15 @@ async def process_document(
     # Split documents
     split_docs = TEXT_SPLITTER.split_documents(docs)
 
-    # If a single parsed doc was split into multiple, update the name metadata
-    # Check if the original parse resulted in a single doc and it was split
-    if len(docs) == 1 and len(split_docs) > 1:
-        original_name = (
-            docs[0].metadata.get("name")
-            if hasattr(docs[0], "metadata") and isinstance(docs[0].metadata, dict)
-            else None
-        )
-        if original_name:
-            for i, split_doc in enumerate(split_docs):
-                # Ensure metadata attribute exists and is a dict before updating
-                if not hasattr(split_doc, "metadata") or not isinstance(
-                    split_doc.metadata, dict
-                ):
-                    split_doc.metadata = {}  # Initialize if it doesn't exist
-                split_doc.metadata["name"] = f"{i + 1}-{original_name}"
+    # Add the generated file_id to all split documents' metadata
+    for split_doc in split_docs:
+        if not hasattr(split_doc, "metadata") or not isinstance(
+            split_doc.metadata, dict
+        ):
+            split_doc.metadata = {}  # Initialize if it doesn't exist
+        split_doc.metadata["file_id"] = str(
+            file_id
+        )  # Store as string for compatibility
 
     return split_docs
 
