@@ -114,29 +114,31 @@ async def collections_update(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Collection '{collection_name}' not found",
             )
-            
+
         # If a new name is provided, check if it already exists (unless it's the same name)
         if collection_data.name and collection_data.name != collection_name:
-            existing_with_new_name = await get_pgvector_collection_details(collection_data.name)
+            existing_with_new_name = await get_pgvector_collection_details(
+                collection_data.name
+            )
             if existing_with_new_name:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Collection with name '{collection_data.name}' already exists",
                 )
-        
+
         # Update the collection
         updated_collection = await update_pgvector_collection(
             collection_name=collection_name,
             new_name=collection_data.name,
             metadata=collection_data.metadata,
         )
-        
+
         if not updated_collection:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to update collection '{collection_name}'",
             )
-            
+
         return CollectionResponse(**updated_collection)
     except HTTPException:
         # Re-raise HTTP exceptions to preserve their status codes

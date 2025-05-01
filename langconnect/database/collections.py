@@ -95,15 +95,17 @@ async def delete_pgvector_collection(collection_name: str) -> None:
 
 
 async def update_pgvector_collection(
-    collection_name: str, new_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
+    collection_name: str,
+    new_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Updates a collection's name and/or metadata in the langchain_pg_collection table.
-    
+
     Args:
         collection_name: Current name of the collection to update
         new_name: Optional new name for the collection
         metadata: Optional new metadata to update or merge with existing metadata
-        
+
     Returns:
         Updated collection details or None if collection not found
     """
@@ -111,23 +113,23 @@ async def update_pgvector_collection(
     existing_collection = await get_pgvector_collection_details(collection_name)
     if not existing_collection:
         return None
-    
+
     # If no updates are provided, return the existing collection
     if new_name is None and metadata is None:
         return existing_collection
-    
+
     # Prepare the update data
     update_name = new_name if new_name is not None else collection_name
-    
+
     # For metadata, if provided, merge with existing metadata
     final_metadata = existing_collection["metadata"]
     if metadata is not None:
         # Update the existing metadata with new values
         final_metadata.update(metadata)
-    
+
     # Convert metadata to JSON string for storage
     metadata_json = json.dumps(final_metadata) if final_metadata else None
-    
+
     async with get_db_connection() as conn:
         query = """
             UPDATE langchain_pg_collection 
@@ -136,23 +138,25 @@ async def update_pgvector_collection(
             RETURNING uuid, name, cmetadata;
         """
         record = await conn.fetchrow(query, update_name, metadata_json, collection_name)
-        
+
         if record:
             # Parse metadata from the result
             updated_metadata = {}
             if record["cmetadata"] is not None and record["cmetadata"] != "null":
                 try:
-                    if isinstance(record["cmetadata"], str) and record["cmetadata"].startswith("{"):
+                    if isinstance(record["cmetadata"], str) and record[
+                        "cmetadata"
+                    ].startswith("{"):
                         updated_metadata = json.loads(record["cmetadata"])
                     else:
                         updated_metadata = record["cmetadata"]
                 except Exception as e:
                     print(f"Error parsing metadata in update_pgvector_collection: {e}")
-            
+
             return {
                 "uuid": str(record["uuid"]),
                 "name": record["name"],
                 "metadata": updated_metadata,
             }
-    
+
     return None
