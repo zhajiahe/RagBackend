@@ -1,7 +1,7 @@
 import os
 import asyncpg
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional, Union
+from typing import AsyncGenerator, Optional, Union, Dict, Any
 
 import sqlalchemy
 from langchain_core.embeddings import Embeddings
@@ -80,6 +80,7 @@ def get_vectorstore(
     collection_name: str = DEFAULT_COLLECTION_NAME,
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
     engine: Optional[Union[DBConnection, Engine, AsyncEngine]] = None,
+    collection_metadata: Optional[Dict[str, Any]] = None,
 ) -> PGVector:
     """
     Initializes and returns a PGVector store for a specific collection,
@@ -93,5 +94,6 @@ def get_vectorstore(
         collection_name=collection_name,
         connection=engine,
         use_jsonb=True,
+        collection_metadata=collection_metadata,
     )
     return store
