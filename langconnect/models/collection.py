@@ -8,25 +8,29 @@ import datetime
 
 
 class CollectionCreate(BaseModel):
-    """Schema for creating a new collection (only name is needed)."""
+    """Schema for creating a new collection."""
 
     name: str = Field(..., description="The unique name of the collection.")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Optional metadata for the collection."
+    )
 
 
 class CollectionResponse(BaseModel):
     """Schema for representing a collection from PGVector."""
 
-    # PGVector table has uuid (UUID) and name (str)
+    # PGVector table has uuid (UUID), name (str), and cmetadata (JSONB)
     # We get these from list/get db functions
     uuid: str = Field(
         ..., description="The unique identifier (UUID) of the collection in PGVector."
     )
     name: str = Field(..., description="The name of the collection.")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Metadata associated with the collection."
+    )
 
     class Config:
-        from_attributes = (
-            True  # Allows creating model from dict like {'uuid': '...', 'name': '...'}
-        )
+        from_attributes = True  # Allows creating model from dict like {'uuid': '...', 'name': '...', 'metadata': {...}}
 
 
 # =====================

@@ -19,8 +19,9 @@ router = APIRouter(prefix="/collections", tags=["collections"])
 async def collections_create(
     collection_data: CollectionCreate,
 ):
-    """Creates a new PGVector collection by name."""
+    """Creates a new PGVector collection by name with optional metadata."""
     collection_name = collection_data.name
+    metadata = collection_data.metadata
     try:
         existing = await get_pgvector_collection_details(collection_name)
         if existing:
@@ -28,7 +29,7 @@ async def collections_create(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Collection '{collection_name}' already exists.",
             )
-        await create_pgvector_collection(collection_name)
+        create_pgvector_collection(collection_name, metadata)
         created_collection = await get_pgvector_collection_details(collection_name)
         if not created_collection:
             raise HTTPException(
