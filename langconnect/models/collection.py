@@ -16,6 +16,15 @@ class CollectionCreate(BaseModel):
     )
 
 
+class CollectionUpdate(BaseModel):
+    """Schema for updating an existing collection."""
+
+    name: Optional[str] = Field(None, description="New name for the collection.")
+    metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Updated metadata for the collection."
+    )
+
+
 class CollectionResponse(BaseModel):
     """Schema for representing a collection from PGVector."""
 

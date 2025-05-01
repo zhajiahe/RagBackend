@@ -4,6 +4,7 @@ from langconnect.database.collections import (
     list_pgvector_collections,
     get_pgvector_collection_details,
     delete_pgvector_collection,
+    update_pgvector_collection,
 )
 from langconnect.database.documents import (
     add_documents_to_vectorstore,
@@ -20,6 +21,7 @@ __all__ = [
     "list_pgvector_collections",
     "get_pgvector_collection_details",
     "delete_pgvector_collection",
+    "update_pgvector_collection",
     "add_documents_to_vectorstore",
     "list_documents_in_vectorstore",
     "get_document_from_vectorstore",
