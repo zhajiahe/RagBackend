@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Dict, List, Optional, Any
 
 
@@ -26,10 +27,26 @@ async def list_pgvector_collections() -> List[Dict[str, Any]]:
         """
         records = await conn.fetch(query)
         for record in records:
+            print(f"Found collection: {record}")
+            # Handle cmetadata - it can be None, a string 'null', or a JSON string
+            metadata = {}
+            if record["cmetadata"] is not None and record["cmetadata"] != "null":
+                try:
+                    # If it's a JSON string, parse it
+                    if isinstance(record["cmetadata"], str) and record[
+                        "cmetadata"
+                    ].startswith("{"):
+                        metadata = json.loads(record["cmetadata"])
+                    else:
+                        metadata = record["cmetadata"]
+                except Exception as e:
+                    print(f"Error parsing metadata in list_pgvector_collections: {e}")
+                    # If parsing fails, use empty dict
+
             collection = {
                 "uuid": str(record["uuid"]),
                 "name": record["name"],
-                "metadata": record["cmetadata"] or {},
+                "metadata": metadata,
             }
             collections.append(collection)
     return collections
@@ -45,10 +62,27 @@ async def get_pgvector_collection_details(
         """
         record = await conn.fetchrow(query, collection_name)
         if record:
+            # Handle cmetadata - it can be None, a string 'null', or a JSON string
+            metadata = {}
+            if record["cmetadata"] is not None and record["cmetadata"] != "null":
+                try:
+                    # If it's a JSON string, parse it
+                    if isinstance(record["cmetadata"], str) and record[
+                        "cmetadata"
+                    ].startswith("{"):
+                        metadata = json.loads(record["cmetadata"])
+                    else:
+                        metadata = record["cmetadata"]
+                except Exception as e:
+                    print(
+                        f"Error parsing metadata in get_pgvector_collection_details: {e}"
+                    )
+                    # If parsing fails, use empty dict
+
             return {
                 "uuid": str(record["uuid"]),
                 "name": record["name"],
-                "metadata": record["cmetadata"] or {},
+                "metadata": metadata,
             }
     return None
 
