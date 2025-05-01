@@ -1,6 +1,7 @@
 from langconnect.models.collection import (
     CollectionCreate,
     CollectionResponse,
+    CollectionUpdate,
 )
 from langconnect.models.document import (
     DocumentCreate,
@@ -13,6 +14,7 @@ from langconnect.models.document import (
 __all__ = [
     "CollectionCreate",
     "CollectionResponse",
+    "CollectionUpdate",
     "DocumentCreate",
     "DocumentUpdate",
     "DocumentResponse",

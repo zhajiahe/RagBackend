@@ -1,11 +1,12 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, status
-from langconnect.models import CollectionCreate, CollectionResponse
+from langconnect.models import CollectionCreate, CollectionResponse, CollectionUpdate
 from langconnect.database import (
     create_pgvector_collection,
     list_pgvector_collections,
     get_pgvector_collection_details,
     delete_pgvector_collection,
+    update_pgvector_collection,
 )
 
 router = APIRouter(prefix="/collections", tags=["collections"])
@@ -96,4 +97,54 @@ async def collections_delete(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete collection '{collection_name}': {e}",
+        )
+
+
+@router.patch("/{collection_name}", response_model=CollectionResponse)
+async def collections_update(
+    collection_name: str,
+    collection_data: CollectionUpdate,
+):
+    """Updates a specific PGVector collection's name and/or metadata."""
+    try:
+        # Check if collection exists
+        existing = await get_pgvector_collection_details(collection_name)
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection '{collection_name}' not found",
+            )
+
+        # If a new name is provided, check if it already exists (unless it's the same name)
+        if collection_data.name and collection_data.name != collection_name:
+            existing_with_new_name = await get_pgvector_collection_details(
+                collection_data.name
+            )
+            if existing_with_new_name:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Collection with name '{collection_data.name}' already exists",
+                )
+
+        # Update the collection
+        updated_collection = await update_pgvector_collection(
+            collection_name=collection_name,
+            new_name=collection_data.name,
+            metadata=collection_data.metadata,
+        )
+
+        if not updated_collection:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update collection '{collection_name}'",
+            )
+
+        return CollectionResponse(**updated_collection)
+    except HTTPException:
+        # Re-raise HTTP exceptions to preserve their status codes
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update collection '{collection_name}': {e}",
         )
