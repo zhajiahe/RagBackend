@@ -8,7 +8,7 @@ from langconnect.database.connection import get_db_connection, get_vectorstore
 logger = logging.getLogger(__name__)
 
 
-def create_pgvector_collection(
+async def create_pgvector_collection(
     collection_name: str, metadata: dict[str, Any] | None = None
 ) -> None:
     """Explicitly creates a collection using PGVector with optional metadata.
@@ -83,8 +83,6 @@ async def get_pgvector_collection_details(
                     logger.exception(
                         f"Error parsing metadata in get_pgvector_collection_details: {e}"
                     )
-                    # If parsing fails, use empty dict
-
             return {
                 "uuid": str(record["uuid"]),
                 "name": record["name"],
@@ -98,8 +96,7 @@ async def delete_pgvector_collection(collection_name: str) -> None:
     PGVector.delete_collection is synchronous, so run in executor.
     """
     store = get_vectorstore(collection_name)
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, store.delete_collection)
+    await asyncio.to_thread(store.delete_collection)
 
 
 async def update_pgvector_collection(

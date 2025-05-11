@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres_test:
     image: pgvector/pgvector:pg16
@@ -7,9 +5,11 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: test
+      # TODO: Change env variables on CI and in this docker-compose file
+      # to match the dev docker compose file (uses standard postgres/postgres)
+      POSTGRES_USER: langchain
+      POSTGRES_PASSWORD: langchain
+      POSTGRES_DB: langchain_test
     volumes:
       - postgres_test_data:/var/lib/postgresql/data
     healthcheck:

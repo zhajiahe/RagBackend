@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from langconnect.auth import AuthenticatedUser, resolve_user
 from langconnect.database import (
     create_pgvector_collection,
     delete_pgvector_collection,
@@ -19,6 +22,7 @@ router = APIRouter(prefix="/collections", tags=["collections"])
 )
 async def collections_create(
     collection_data: CollectionCreate,
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
 ):
     """Creates a new PGVector collection by name with optional metadata."""
     collection_name = collection_data.name
