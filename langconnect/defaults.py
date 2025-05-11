@@ -11,3 +11,6 @@ if os.environ.get("IS_TESTING", "false").strip().lower() == "true":
 else:
     DEFAULT_EMBEDDINGS = OpenAIEmbeddings()
 DEFAULT_COLLECTION_NAME = "default_collection"
+
+
+DEFAULT_TEST_USER_ID = "ecdaa2d6-6a44-4784-9acc-c56257dc3c13"

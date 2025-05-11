@@ -10,6 +10,8 @@ from gotrue.types import User
 from starlette.authentication import BaseUser
 from supabase import Client, create_client
 
+from langconnect.defaults import DEFAULT_TEST_USER_ID
+
 app = FastAPI()
 
 security = HTTPBearer()
@@ -94,12 +96,8 @@ def resolve_user(
     if not credentials.credentials:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if "IS_TESTING" not in os.environ:
-        raise AssertionError(
-            "Environment variable 'IS_TESTING' not set. "
-            "This function should only be called in a testing environment until "
-            "the JWT verification logic is implemented."
-        )
+    if "IS_TESTING" in os.environ:
+        return AuthenticatedUser(DEFAULT_TEST_USER_ID, "John Doe")
 
     user = get_current_user(credentials.credentials)
 
