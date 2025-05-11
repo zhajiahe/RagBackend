@@ -1,27 +1,41 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
+from langconnect.auth import AuthenticatedUser
 from langconnect.database.connection import get_db_connection, get_vectorstore
 
 logger = logging.getLogger(__name__)
 
 
 async def create_pgvector_collection(
-    collection_name: str, metadata: dict[str, Any] | None = None
+    user: AuthenticatedUser, collection_name: str, metadata: dict[str, Any]
 ) -> None:
     """Explicitly creates a collection using PGVector with optional metadata.
+
     Note: This is often not necessary as adding documents implicitly creates it.
     PGVector.create_collection is synchronous, so run in executor.
     """
+    if not isinstance(metadata, dict):
+        raise TypeError(
+            f"Programming error: metadata must be a dict. Got {type(metadata)}"
+        )
+
+    # The fields below are stored in the metadata column for now, but they
+    # should be stored in separate columns.
+    metadata['owner_id'] = user.identity
+    # Write current time in ISO-8601 formatted style to created_at
+    metadata['created_at'] = datetime.now(timezone.utc).isoformat()
+
     # Calling this will create the collection w/ metadata in the database.
     # The PGVector class will always attempt to get/create a collection when
     # the class is instantiated.
     get_vectorstore(collection_name, collection_metadata=metadata)
 
 
-async def list_pgvector_collections() -> list[dict[str, Any]]:
+async def list_pgvector_collections(user: AuthenticatedUser) -> list[dict[str, Any]]:
     """Lists all collections directly from the langchain_pg_collection table."""
     collections = []
     async with get_db_connection() as conn:
@@ -59,7 +73,7 @@ async def list_pgvector_collections() -> list[dict[str, Any]]:
 
 
 async def get_pgvector_collection_details(
-    collection_name: str,
+    user: AuthenticatedUser, collection_name: str,
 ) -> dict[str, Any] | None:
     """Gets collection details (uuid, name, metadata) from the langchain_pg_collection table."""
     async with get_db_connection() as conn:
@@ -91,7 +105,7 @@ async def get_pgvector_collection_details(
     return None
 
 
-async def delete_pgvector_collection(collection_name: str) -> None:
+async def delete_pgvector_collection(user: AuthenticatedUser, collection_name: str) -> None:
     """Deletes a collection using PGVector.
     PGVector.delete_collection is synchronous, so run in executor.
     """

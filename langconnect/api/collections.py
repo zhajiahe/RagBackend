@@ -34,8 +34,8 @@ async def collections_create(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Collection '{collection_name}' already exists.",
             )
-        await create_pgvector_collection(collection_name, metadata)
-        created_collection = await get_pgvector_collection_details(collection_name)
+        await create_pgvector_collection(user, collection_name, metadata)
+        created_collection = await get_pgvector_collection_details(user, collection_name)
         if not created_collection:
             raise HTTPException(
                 status_code=500, detail="Failed to retrieve collection after creation"
@@ -50,10 +50,10 @@ async def collections_create(
 
 
 @router.get("", response_model=list[CollectionResponse])
-async def collections_list():
+async def collections_list(user: Annotated[AuthenticatedUser, Depends(resolve_user)]):
     """Lists all available PGVector collections (name and UUID)."""
     try:
-        collections = await list_pgvector_collections()
+        collections = await list_pgvector_collections(user)
         return [CollectionResponse(**c) for c in collections]
     except Exception as e:
         raise HTTPException(
