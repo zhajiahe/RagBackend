@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from langconnect.auth import AuthenticatedUser
@@ -25,9 +25,9 @@ async def create_pgvector_collection(
 
     # The fields below are stored in the metadata column for now, but they
     # should be stored in separate columns.
-    metadata['owner_id'] = user.identity
+    metadata["owner_id"] = user.identity
     # Write current time in ISO-8601 formatted style to created_at
-    metadata['created_at'] = datetime.now(timezone.utc).isoformat()
+    metadata["created_at"] = datetime.now(UTC).isoformat()
 
     # Calling this will create the collection w/ metadata in the database.
     # The PGVector class will always attempt to get/create a collection when
@@ -73,7 +73,8 @@ async def list_pgvector_collections(user: AuthenticatedUser) -> list[dict[str, A
 
 
 async def get_pgvector_collection_details(
-    user: AuthenticatedUser, collection_name: str,
+    user: AuthenticatedUser,
+    collection_name: str,
 ) -> dict[str, Any] | None:
     """Gets collection details (uuid, name, metadata) from the langchain_pg_collection table."""
     async with get_db_connection() as conn:
@@ -105,7 +106,9 @@ async def get_pgvector_collection_details(
     return None
 
 
-async def delete_pgvector_collection(user: AuthenticatedUser, collection_name: str) -> None:
+async def delete_pgvector_collection(
+    user: AuthenticatedUser, collection_name: str
+) -> None:
     """Deletes a collection using PGVector.
     PGVector.delete_collection is synchronous, so run in executor.
     """

@@ -1,7 +1,8 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from httpx import ASGITransport, AsyncClient
 from uuid import UUID
+
+from httpx import ASGITransport, AsyncClient
 
 from langconnect.database import get_vectorstore
 from langconnect.database.connection import POSTGRES_DB, POSTGRES_HOST
@@ -105,7 +106,6 @@ async def test_create_and_list_collection() -> None:
         collections = list_response.json()
         assert len(collections) > 0
         assert any(c["name"] == "test_collection" for c in collections)
-
 
 
 async def test_create_collection_conflict() -> None:

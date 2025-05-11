@@ -35,7 +35,9 @@ async def collections_create(
                 detail=f"Collection '{collection_name}' already exists.",
             )
         await create_pgvector_collection(user, collection_name, metadata)
-        created_collection = await get_pgvector_collection_details(user, collection_name)
+        created_collection = await get_pgvector_collection_details(
+            user, collection_name
+        )
         if not created_collection:
             raise HTTPException(
                 status_code=500, detail="Failed to retrieve collection after creation"

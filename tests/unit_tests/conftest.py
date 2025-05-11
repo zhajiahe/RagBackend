@@ -1,6 +1,7 @@
 import asyncio
-import pytest
 import os
+
+import pytest
 
 if "OPENAI_API_KEY" in os.environ:
     raise AssertionError(
@@ -13,8 +14,7 @@ os.environ["OPENAI_API_KEY"] = "test_key"
 
 @pytest.fixture(scope="session")
 def event_loop():
-    """
-    Create a single asyncio event loop for the entire test session,
+    """Create a single asyncio event loop for the entire test session,
     and only close it once at the very end.
     This overrides pytest-asyncio's default event_loop fixture.
     """

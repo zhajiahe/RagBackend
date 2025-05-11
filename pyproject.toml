@@ -26,6 +26,7 @@ dependencies = [
     "pdfminer.six>=20250416",
     "lxml>=5.4.0",
     "unstructured>=0.17.2",
+    "supabase>=2.15.1",
 ]
 
 [project.packages]
