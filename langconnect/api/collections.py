@@ -34,7 +34,7 @@ async def collections_create(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Collection '{collection_name}' already exists.",
             )
-        create_pgvector_collection(collection_name, metadata)
+        await create_pgvector_collection(collection_name, metadata)
         created_collection = await get_pgvector_collection_details(collection_name)
         if not created_collection:
             raise HTTPException(
