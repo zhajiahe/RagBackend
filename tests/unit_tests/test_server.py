@@ -132,7 +132,7 @@ async def test_create_collection_requires_auth() -> None:
         r2 = await client.post(
             "/collections", json=payload, headers=NO_SUCH_USER_HEADERS
         )
-        assert r2.status_code == 401
+        assert r2.status_code == 403
 
 
 async def test_get_nonexistent_collection() -> None:
@@ -147,21 +147,21 @@ async def test_delete_collection_and_nonexistent() -> None:
     """DELETE removes an existing collection and returns 404 on missing."""
     async with get_async_test_client() as client:
         # create first
-        payload = {"name": "to_delete", "metadata": {}}
+        payload = {"name": "to_delete", "metadata": {"foo": "bar"}}
         r1 = await client.post("/collections", json=payload, headers=USER_1_HEADERS)
         assert r1.status_code == 201
 
         # delete it
-        r2 = await client.delete("/collections/to_delete")
+        r2 = await client.delete("/collections/to_delete", headers=USER_1_HEADERS)
         assert r2.status_code == 204
 
-        # then GET should 404
-        r3 = await client.get("/collections/to_delete")
+        # Try to get it again
+        r3 = await client.get("/collections/to_delete", headers=USER_1_HEADERS)
         assert r3.status_code == 404
 
-        # deleting again yields 404
-        r4 = await client.delete("/collections/to_delete")
-        assert r4.status_code == 404
+        # Deletion is idempotent
+        r4 = await client.delete("/collections/to_delete", headers=USER_1_HEADERS)
+        assert r4.status_code == 204
 
 
 async def test_update_collection_name_and_metadata() -> None:

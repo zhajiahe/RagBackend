@@ -71,14 +71,11 @@ async def collections_delete(
     collection_name: str,
 ):
     """Deletes a specific PGVector collection by name."""
-    existing = await get_pgvector_collection_details(user, collection_name)
-    if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Collection '{collection_name}' not found",
-        )
-
     await delete_pgvector_collection(user, collection_name)
+    return HTTPException(
+        status_code=status.HTTP_204_NO_CONTENT,
+        detail=f"Collection '{collection_name}' deleted successfully.",
+    )
 
 
 @router.patch("/{collection_name}", response_model=CollectionResponse)

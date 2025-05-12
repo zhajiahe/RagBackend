@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -6,7 +5,6 @@ from typing import Any, TypedDict
 
 from langconnect.auth import AuthenticatedUser
 from langconnect.database.connection import get_db_connection, get_vectorstore
-from langconnect.database.utils import assert_collection_owner
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +115,7 @@ async def get_pgvector_collection_details(
                     logger.exception(
                         f"Error parsing metadata in get_pgvector_collection_details: {e}"
                     )
+                    raise
             return {
                 "uuid": str(record["uuid"]),
                 "name": record["name"],
@@ -127,13 +126,23 @@ async def get_pgvector_collection_details(
 
 async def delete_pgvector_collection(
     user: AuthenticatedUser, collection_name: str
-) -> None:
+) -> int:
     """Deletes a collection using PGVector.
-    PGVector.delete_collection is synchronous, so run in executor.
+
+    Return the number of rows deleted from the collections table.
     """
-    store = get_vectorstore(collection_name)
-    assert_collection_owner(store, user)
-    await asyncio.to_thread(store.delete_collection)
+    async with get_db_connection() as conn:
+        query = """
+            DELETE FROM langchain_pg_collection 
+            WHERE name = $1 AND cmetadata->>'owner_id' = $2;
+        """
+        results = await conn.execute(query, collection_name, user.identity)
+        if not results.startswith("DELETE"):
+            raise AssertionError(
+                f"Error deleting collection '{collection_name}': {results}"
+            )
+        num_deleted = results.split(" ")[1]
+        return num_deleted
 
 
 async def update_pgvector_collection(
