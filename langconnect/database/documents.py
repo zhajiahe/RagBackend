@@ -1,56 +1,60 @@
+import asyncpg
 import json
 import logging
 import uuid
-from typing import Any, Optional
-
-import asyncpg
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from typing import Any, Optional
 
 from langconnect.auth import AuthenticatedUser
+from langconnect.database.collections import assert_ownership_of_collection
 from langconnect.database.connection import (
     get_db_connection,
     get_vectorstore,
 )
-from langconnect.database.utils import assert_collection_owner
-from langconnect.defaults import DEFAULT_EMBEDDINGS
+from langconnect.config import DEFAULT_EMBEDDINGS
 
 logger = logging.getLogger(__name__)
 
 
 def add_documents_to_vectorstore(
+    user: AuthenticatedUser,
     collection_name: str,
     documents: list[Document],
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
-    user: AuthenticatedUser | None = None,
 ) -> list[str]:
     """Adds LangChain documents to the specified PGVector collection."""
+    assert_ownership_of_collection(
+        user=user,
+        collection_name=collection_name,
+    )
     store = get_vectorstore(
         collection_name=collection_name,
         embeddings=embeddings,
     )
-
-    assert_collection_owner(store, user)
-    added_ids = store.add_documents(documents, ids=None)  # Let PGVector generate IDs
+    added_ids = store.add_documents(documents)
     return added_ids
 
 
 async def list_documents_in_vectorstore(
+    user: AuthenticatedUser,
     collection_name: str,
     limit: int = 10,
     offset: int = 0,
-    user: AuthenticatedUser = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | None:
     """Lists unique documents based on 'file_id' in metadata from the vector store.
     Returns one representative entry per file_id.
     NOTE: This bypasses LangChain's abstraction for efficient unique listing.
     Requires direct asyncpg connection to query langchain_pg_embedding table.
 
     Only returns documents from collections owned by the authenticated user.
-    """
-    if user is None:
-        raise ValueError("User must be provided")
 
+    Returns:
+        - A list of dictionaries, each representing a document with its ID, content,
+          metadata, and collection ID.
+        - An empty list if no documents are found in the collection, but the collection exists.
+        - None if the collection does not exist or is not owned by the user.
+    """
     documents = []
     try:
         async with get_db_connection() as conn:
@@ -66,10 +70,7 @@ async def list_documents_in_vectorstore(
             )
 
             if not collection_record:
-                logger.info(
-                    f"Warning: Collection '{collection_name}' not found or not owned by user."
-                )
-                return []
+                return None
 
             collection_uuid = collection_record["uuid"]
 
@@ -251,12 +252,15 @@ def search_documents_in_vectorstore(
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
 ) -> list[dict[str, Any]]:
     """Performs semantic similarity search within the specified PGVector collection."""
+    assert_ownership_of_collection(
+        user=user,
+        collection_name=collection_name,
+    )
     store = get_vectorstore(
         collection_name=collection_name,
         embeddings=embeddings,
     )
 
-    assert_collection_owner(store, user)
     results_with_scores = store.similarity_search_with_score(query, k=limit)
 
     formatted_results = []

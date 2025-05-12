@@ -1,4 +1,5 @@
 from starlette.config import Config, undefined
+from langchain_core.embeddings import Embeddings
 
 env = Config()
 
@@ -10,3 +11,18 @@ if IS_TESTING:
 else:
     SUPABASE_URL = env("SUPABASE_URL", cast=str, default=undefined)
     SUPABASE_KEY = env("SUPABASE_KEY", cast=str, default=undefined)
+
+
+def get_embeddings() -> Embeddings:
+    """Get the embeddings instance based on the environment."""
+    if IS_TESTING:
+        from langchain_core.embeddings import DeterministicFakeEmbedding
+        return DeterministicFakeEmbedding(size=512)
+    else:
+        from langchain_openai import OpenAIEmbeddings
+        return OpenAIEmbeddings()
+
+
+
+DEFAULT_EMBEDDINGS = get_embeddings()
+DEFAULT_COLLECTION_NAME = "default_collection"

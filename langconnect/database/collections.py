@@ -8,6 +8,32 @@ from langconnect.database.connection import get_db_connection, get_vectorstore
 logger = logging.getLogger(__name__)
 
 
+async def assert_ownership_of_collection(
+    user: AuthenticatedUser,
+    collection_name: str,
+) -> None:
+    """Assert that the user owns the collection."""
+    async with get_db_connection() as conn:
+        query = """
+            SELECT uuid
+            FROM langchain_pg_collection 
+            WHERE name = $1 AND cmetadata->>'owner_id' = $2;
+        """
+        record = await conn.fetchrow(query, collection_name, user.identity)
+        if not record:
+            raise ValueError(
+                f"Collection '{collection_name}' does not exist or you do not own it."
+            )
+        # Verify that there is at most one record
+        if len(record) > 1:
+            # This should never occur and denotes a programming error.
+            raise ValueError(
+                f"Multiple collections found with name '{collection_name}'."
+            )
+        # If the collection exists and is owned by the user, do nothing
+        return None
+
+
 async def create_pgvector_collection(
     user: AuthenticatedUser, collection_name: str, metadata: dict[str, Any]
 ) -> None:

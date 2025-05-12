@@ -343,3 +343,154 @@ async def test_ownership() -> None:
         # user 1 can delete it
         r5 = await client.delete("/collections/owned_by_user1", headers=USER_1_HEADERS)
         assert r5.status_code == 204
+
+
+@pytest.mark.skip(reason="Have not fixed yet.")
+async def test_documents_create_and_list_and_delete_and_search() -> None:
+    async with get_async_test_client() as client:
+        # Create a collection for documents
+        collection = "docs_test_col"
+        col_payload = {"name": collection, "metadata": {"purpose": "doc-test"}}
+        create_col = await client.post(
+            "/collections", json=col_payload, headers=USER_1_HEADERS
+        )
+        assert create_col.status_code == 201
+
+        # Prepare a simple text file
+        file_content = b"Hello world. This is a test document."
+        files = [("files", ("test.txt", file_content, "text/plain"))]
+        # Create documents without metadata
+        resp = await client.post(
+            f"/collections/{collection}/documents",
+            files=files,
+            headers=USER_1_HEADERS,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        # added_chunk_ids should be a non-empty list of UUIDs
+        ids = data["added_chunk_ids"]
+        assert isinstance(ids, list) and ids
+        for chunk_id in ids:
+            # Validate each is a UUID string
+            UUID(chunk_id)
+
+        # List documents in collection, default limit 10
+        list_resp = await client.get(
+            f"/collections/{collection}/documents", headers=USER_1_HEADERS
+        )
+        assert list_resp.status_code == 200
+        docs = list_resp.json()
+        assert isinstance(docs, list) and docs
+        # Each doc should have id and text fields
+
+        assert len(docs) == 1
+        assert docs[0]["content"] == "Hello world. This is a test document."
+
+        # Search documents with a valid query
+        search_payload = {"query": "test document", "limit": 5}
+        search_resp = await client.post(
+            f"/collections/{collection}/documents/search",
+            json=search_payload,
+            headers=USER_1_HEADERS,
+        )
+        assert search_resp.status_code == 200
+        results = search_resp.json()
+        assert isinstance(results, list)
+        # Each result should have id, score, text
+        for r in results:
+            assert "id" in r and "score" in r and "text" in r
+
+        # Delete a document
+        doc_id = docs[0]["id"]
+        del_resp = await client.delete(
+            f"/collections/{collection}/documents/{doc_id}",
+        )
+        assert del_resp.status_code == 200
+        assert del_resp.json() == {"success": True}
+
+        # Delete non-existent document gracefully
+        del_resp2 = await client.delete(
+            f"/collections/{collection}/documents/{doc_id}",
+        )
+        # Should still return success True or 200/204; here assume 200
+        assert del_resp2.status_code in (200, 204)
+
+
+async def test_documents_create_with_invalid_metadata_json():
+    async with get_async_test_client() as client:
+        # Create a collection
+        col_name = "meta_test_col"
+        await client.post(
+            "/collections",
+            json={"name": col_name, "metadata": {}},
+            headers=USER_1_HEADERS,
+        )
+        # Prepare file
+        file_content = b"Sample"
+        files = [("files", ("a.txt", file_content, "text/plain"))]
+        # Provide invalid JSON
+        resp = await client.post(
+            f"/collections/{col_name}/documents",
+            files=files,
+            data={"metadatas_json": "not-a-json"},
+            headers=USER_1_HEADERS,
+        )
+        assert resp.status_code == 400
+        assert "Invalid JSON format" in resp.json()["detail"]
+
+
+async def test_documents_search_empty_query():
+    async with get_async_test_client() as client:
+        # Create a collection for search test
+        col_name = "search_test_col"
+        await client.post(
+            "/collections",
+            json={"name": col_name, "metadata": {}},
+            headers=USER_1_HEADERS,
+        )
+        # Attempt search with empty query
+        resp = await client.post(
+            f"/collections/{col_name}/documents/search",
+            json={"query": "", "limit": 3},
+            headers=USER_1_HEADERS,
+        )
+        assert resp.status_code == 400
+        assert "Search query cannot be empty" in resp.json()["detail"]
+
+
+@pytest.mark.skip(reason="Have not fixed yet.")
+async def test_documents_in_nonexistent_collection():
+    async with get_async_test_client() as client:
+        # Try listing documents in missing collection
+        list_resp = await client.get(
+            "/collections/no_such_col/documents", headers=USER_1_HEADERS
+        )
+        assert list_resp.status_code == 404
+
+        # Try uploading to missing collection
+        file_content = b"X"
+        files = [("files", ("x.txt", file_content, "text/plain"))]
+        upload_resp = await client.post(
+            "/collections/no_such_col/documents",
+            files=files,
+            headers=USER_1_HEADERS,
+        )
+        assert upload_resp.status_code == 404
+        assert "Collection not found" in upload_resp.json()["detail"]
+
+        # Try deleting from missing collection/document
+        del_resp = await client.delete(
+            "/collections/no_such_col/documents/abcdef", headers=USER_1_HEADERS
+        )
+        # Depending on implementation may return 500 or success False
+        assert del_resp.status_code in (404, 500, 200, 204)
+
+        # Try search in missing collection
+        search_resp = await client.post(
+            "/collections/no_such_col/documents/search",
+            json={"query": "foo"},
+            headers=USER_1_HEADERS,
+        )
+        # Not found or 404
+        assert search_resp.status_code == 404

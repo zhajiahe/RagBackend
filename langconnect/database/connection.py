@@ -11,7 +11,7 @@ from langchain_postgres.vectorstores import PGVector
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from langconnect.defaults import DEFAULT_COLLECTION_NAME, DEFAULT_EMBEDDINGS
+from langconnect.config import DEFAULT_EMBEDDINGS, DEFAULT_COLLECTION_NAME
 
 logger = logging.getLogger(__name__)
 
