@@ -4,7 +4,7 @@ env = Config()
 
 IS_TESTING = env("IS_TESTING", cast=str, default=False)
 
-if IS_TESTING:
+if IS_TESTING and IS_TESTING.lower() == "true":
     SUPABASE_URL = ""
     SUPABASE_KEY = ""
 else:

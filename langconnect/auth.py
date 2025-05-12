@@ -79,7 +79,7 @@ def resolve_user(
     if not credentials.credentials:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if config.IS_TESTING:
+    if config.IS_TESTING and config.IS_TESTING.lower() == "true":
         if credentials.credentials in {"user1", "user2"}:
             return AuthenticatedUser(credentials.credentials, credentials.credentials)
         raise HTTPException(
