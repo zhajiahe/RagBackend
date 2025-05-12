@@ -7,10 +7,12 @@ import asyncpg
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
+from langconnect.auth import AuthenticatedUser
 from langconnect.database.connection import (
     get_db_connection,
     get_vectorstore,
 )
+from langconnect.database.utils import assert_collection_owner
 from langconnect.defaults import DEFAULT_EMBEDDINGS
 
 logger = logging.getLogger(__name__)
@@ -20,12 +22,15 @@ def add_documents_to_vectorstore(
     collection_name: str,
     documents: list[Document],
     embeddings: Embeddings = DEFAULT_EMBEDDINGS,
+    user: AuthenticatedUser | None = None,
 ) -> list[str]:
     """Adds LangChain documents to the specified PGVector collection."""
     store = get_vectorstore(
         collection_name=collection_name,
         embeddings=embeddings,
     )
+
+    assert_collection_owner(store, user)
     added_ids = store.add_documents(documents, ids=None)  # Let PGVector generate IDs
     return added_ids
 
@@ -34,21 +39,36 @@ async def list_documents_in_vectorstore(
     collection_name: str,
     limit: int = 10,
     offset: int = 0,
+    user: AuthenticatedUser = None,
 ) -> list[dict[str, Any]]:
     """Lists unique documents based on 'file_id' in metadata from the vector store.
     Returns one representative entry per file_id.
     NOTE: This bypasses LangChain's abstraction for efficient unique listing.
     Requires direct asyncpg connection to query langchain_pg_embedding table.
+
+    Only returns documents from collections owned by the authenticated user.
     """
+    if user is None:
+        raise ValueError("User must be provided")
+
     documents = []
     try:
         async with get_db_connection() as conn:
+            # Get collection with owner check
+            collection_query = """
+            SELECT uuid FROM langchain_pg_collection 
+            WHERE name = $1 AND cmetadata->>'owner_id' = $2
+            """
             collection_record = await conn.fetchrow(
-                "SELECT uuid FROM langchain_pg_collection WHERE name = $1",
+                collection_query,
                 collection_name,
+                user.identity if user else None,
             )
+
             if not collection_record:
-                logger.info(f"Warning: Collection '{collection_name}' not found.")
+                logger.info(
+                    f"Warning: Collection '{collection_name}' not found or not owned by user."
+                )
                 return []
 
             collection_uuid = collection_record["uuid"]
@@ -92,7 +112,8 @@ async def list_documents_in_vectorstore(
                 )
     except asyncpg.exceptions.UndefinedTableError:
         logger.info(
-            f"Warning: Table langchain_pg_embedding or langchain_pg_collection not found for collection '{collection_name}'. Returning empty list."
+            f"Table langchain_pg_embedding or langchain_pg_collection "
+            f"not found for collection '{collection_name}'. Returning empty list."
         )
         return []
     except Exception as e:
@@ -104,10 +125,16 @@ async def list_documents_in_vectorstore(
 
 async def get_document_from_vectorstore(
     document_id: str,
+    user: AuthenticatedUser = None,
 ) -> Optional[dict[str, Any]]:
     """Gets a single document by its ID from the vector store's underlying table.
     Requires direct SQL access.
+
+    Only returns documents from collections owned by the authenticated user.
     """
+    if user is None:
+        raise ValueError("User must be provided")
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
@@ -116,11 +143,16 @@ async def get_document_from_vectorstore(
 
     try:
         async with get_db_connection() as conn:
+            # Join with collection table to verify ownership
             query = """
-                SELECT uuid, document, cmetadata FROM langchain_pg_embedding
-                WHERE uuid = $1 
+                SELECT e.uuid, e.document, e.cmetadata 
+                FROM langchain_pg_embedding e
+                JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                WHERE e.uuid = $1 AND c.cmetadata->>'owner_id' = $2
             """
-            record = await conn.fetchrow(query, doc_uuid)
+            record = await conn.fetchrow(
+                query, doc_uuid, user.identity if user else None
+            )
 
             if record:
                 return {
@@ -135,29 +167,36 @@ async def get_document_from_vectorstore(
 
 
 async def delete_documents_from_vectorstore(
+    user: AuthenticatedUser,
     collection_name: str,
     file_ids: list[str],
 ) -> bool:
     """Deletes all document chunks associated with the given file_ids
     from the specified PGVector collection using direct SQL.
     Assumes file_ids are stored in the 'file_id' key of the cmetadata JSONB field.
+
+    Only deletes documents from collections owned by the authenticated user.
     """
     if not file_ids:
         return True  # Nothing to delete
-
-    deleted_count = 0
     try:
         async with get_db_connection() as conn:
-            # 1. Get collection UUID
+            # 1. Get collection UUID with owner check
+            collection_query = """
+            SELECT uuid FROM langchain_pg_collection 
+            WHERE name = $1 AND cmetadata->>'owner_id' = $2
+            """
             collection_record = await conn.fetchrow(
-                "SELECT uuid FROM langchain_pg_collection WHERE name = $1",
+                collection_query,
                 collection_name,
+                user.identity if user else None,
             )
+
             if not collection_record:
                 logger.info(
-                    f"Warning: Collection '{collection_name}' not found for deletion."
+                    f"Warning: Collection '{collection_name}' not found for deletion or not owned by user."
                 )
-                return False  # Indicate failure as collection doesn't exist
+                return False  # Indicate failure as collection doesn't exist or user doesn't own it
 
             collection_uuid = collection_record["uuid"]
 
@@ -178,31 +217,34 @@ async def delete_documents_from_vectorstore(
             try:
                 deleted_count = int(result.split()[-1])
                 logger.info(
-                    f"Deleted {deleted_count} chunks for file_ids {file_ids} in collection '{collection_name}'."
+                    f"Deleted {deleted_count} chunks for file_ids {file_ids} in "
+                    f"collection '{collection_name}'."
                 )
             except (IndexError, ValueError):
                 # Handle cases where the result string might be unexpected
                 logger.info(
-                    f"Deletion executed for file_ids {file_ids} in collection '{collection_name}', but count parsing failed. Result: {result}"
+                    f"Deletion executed for file_ids {file_ids} in "
+                    f"collection '{collection_name}', but count parsing "
+                    f"failed. Result: {result}"
                 )
-                # Consider success if execute didn't raise an error
-                deleted_count = -1  # Indicate count unknown
-
             return True  # Indicate success
 
     except asyncpg.exceptions.UndefinedTableError:
         logger.info(
-            f"Warning: Table langchain_pg_embedding or langchain_pg_collection not found for deletion in collection '{collection_name}'."
+            f"Warning: Table langchain_pg_embedding or langchain_pg_collection not "
+            f"found for deletion in collection '{collection_name}'."
         )
         return False
     except Exception as e:
         logger.info(
-            f"Error deleting documents by file_ids {file_ids} from collection {collection_name}: {e}"
+            f"Error deleting documents by file_ids {file_ids} "
+            f"from collection {collection_name}: {e}"
         )
         return False
 
 
 def search_documents_in_vectorstore(
+    user: AuthenticatedUser,
     collection_name: str,
     query: str,
     limit: int = 4,
@@ -214,6 +256,7 @@ def search_documents_in_vectorstore(
         embeddings=embeddings,
     )
 
+    assert_collection_owner(store, user)
     results_with_scores = store.similarity_search_with_score(query, k=limit)
 
     formatted_results = []
@@ -228,14 +271,3 @@ def search_documents_in_vectorstore(
             }
         )
     return formatted_results
-
-
-def record_to_dict(record) -> Optional[dict[str, Any]]:
-    """Converts an asyncpg Record to a dictionary (useful for direct DB access)."""
-    if record is None:
-        return None
-    return {
-        key: (str(value) if isinstance(value, uuid.UUID) else value)
-        for key, value in record.items()
-        if key != "embedding"
-    }

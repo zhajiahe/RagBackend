@@ -22,7 +22,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "langchain")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "langchain")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "langchain_test")
 
-_pool: asyncpg.Pool = None
+_pool: asyncpg.Pool | None = None
 
 
 async def get_db_pool() -> asyncpg.Pool:

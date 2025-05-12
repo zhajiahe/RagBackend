@@ -86,18 +86,19 @@ async def collections_get(
 
 @router.delete("/{collection_name}", status_code=status.HTTP_204_NO_CONTENT)
 async def collections_delete(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
 ):
     """Deletes a specific PGVector collection by name."""
     try:
-        existing = await get_pgvector_collection_details(collection_name)
+        existing = await get_pgvector_collection_details(user, collection_name)
         if not existing:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Collection '{collection_name}' not found",
             )
 
-        await delete_pgvector_collection(collection_name)
+        await delete_pgvector_collection(user, collection_name)
         return
     except Exception as e:
         raise HTTPException(
@@ -108,13 +109,16 @@ async def collections_delete(
 
 @router.patch("/{collection_name}", response_model=CollectionResponse)
 async def collections_update(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
     collection_data: CollectionUpdate,
 ):
     """Updates a specific PGVector collection's name and/or metadata."""
+    # Check ownership of collection.
+
     try:
         # Check if collection exists
-        existing = await get_pgvector_collection_details(collection_name)
+        existing = await get_pgvector_collection_details(user, collection_name)
         if not existing:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -124,7 +128,7 @@ async def collections_update(
         # If a new name is provided, check if it already exists (unless it's the same name)
         if collection_data.name and collection_data.name != collection_name:
             existing_with_new_name = await get_pgvector_collection_details(
-                collection_data.name
+                user, collection_data.name
             )
             if existing_with_new_name:
                 raise HTTPException(

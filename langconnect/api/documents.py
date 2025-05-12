@@ -1,10 +1,11 @@
 import json
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from langchain_core.documents import Document
 
+from langconnect.auth import AuthenticatedUser, resolve_user
 from langconnect.database import (
     add_documents_to_vectorstore,
     delete_documents_from_vectorstore,
@@ -25,10 +26,11 @@ async def documents_create(
     collection_name: str,
     files: list[UploadFile] = File(...),
     metadatas_json: str | None = Form(None),
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)] = None,
 ):
     """Processes and indexes (adds) new document files with optional metadata."""
     try:
-        collection = await get_pgvector_collection_details(collection_name)
+        collection = await get_pgvector_collection_details(user, collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail="Collection not found")
     except Exception as e:
@@ -99,7 +101,9 @@ async def documents_create(
     # but maybe inform the user about the failures.
 
     try:
-        added_ids = add_documents_to_vectorstore(collection_name, all_langchain_docs)
+        added_ids = add_documents_to_vectorstore(
+            collection_name, all_langchain_docs, user=user
+        )
         if not added_ids:
             # This might indicate a problem with the vector store itself
             raise HTTPException(
@@ -172,6 +176,7 @@ async def documents_delete(
     "/collections/{collection_name}/documents/search", response_model=list[SearchResult]
 )
 def documents_search(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
     search_query: SearchQuery,
 ):
@@ -180,6 +185,7 @@ def documents_search(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
     results = search_documents_in_vectorstore(
+        user,
         collection_name,
         query=search_query.query,
         limit=search_query.limit or 10,
