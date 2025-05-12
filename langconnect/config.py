@@ -2,9 +2,9 @@ from starlette.config import Config, undefined
 
 env = Config()
 
-IS_TESTING = env("IS_TESTING", cast=str, default=False)
+IS_TESTING = env("IS_TESTING", cast=str, default="").lower() == "true"
 
-if IS_TESTING and IS_TESTING.lower() == "true":
+if IS_TESTING:
     SUPABASE_URL = ""
     SUPABASE_KEY = ""
 else:
