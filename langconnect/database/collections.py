@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 from langconnect.auth import AuthenticatedUser
@@ -25,8 +24,6 @@ async def create_pgvector_collection(
     # The fields below are stored in the metadata column for now, but they
     # should be stored in separate columns.
     metadata["owner_id"] = user.identity
-    # Write current time in ISO-8601 formatted style to created_at
-    metadata["created_at"] = datetime.now(UTC).isoformat()
 
     # Calling this will create the collection w/ metadata in the database.
     # The PGVector class will always attempt to get/create a collection when
@@ -151,67 +148,54 @@ async def update_pgvector_collection(
     new_name: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Updates a collection's name and/or metadata in the langchain_pg_collection table.
+    """Atomically update a collection's name and/or metadata in one DB call.
 
-    Args:
-        collection_name: Current name of the collection to update
-        new_name: Optional new name for the collection
-        metadata: Optional new metadata to update or merge with existing metadata
-
-    Returns:
-        Updated collection details or None if collection not found
-
+    - If `new_name` is None, the name is left unchanged.
+    - If `metadata` is None, the JSON metadata column is left untouched.
+    - Otherwise, cmetadata is replaced wholesale with the provided JSON.
+    Returns the updated collection details, or None if no match.
     """
-    # First, get the existing collection to ensure it exists and to get current metadata
-    existing_collection = await get_pgvector_collection_details(user, collection_name)
-    if not existing_collection:
-        return None
-
-    # If no updates are provided, return the existing collection
-    if new_name is None and metadata is None:
-        return existing_collection
-
-    # Prepare the update data
-    update_name = new_name if new_name is not None else collection_name
-
-    # For metadata, if provided, merge with existing metadata
-    final_metadata = existing_collection["metadata"]
     if metadata is not None:
-        # Update the existing metadata with new values
-        final_metadata.update(metadata)
-
-    # Convert metadata to JSON string for storage
-    metadata_json = json.dumps(final_metadata) if final_metadata else None
+        metadata["owner_id"] = user.identity  # Ensure owner_id is set
+    # Prepare the JSON blob, or None
+    metadata_json = json.dumps(metadata) if metadata is not None else None
 
     async with get_db_connection() as conn:
         query = """
-            UPDATE langchain_pg_collection 
-            SET name = $1, cmetadata = $2
-            WHERE name = $3
+            UPDATE langchain_pg_collection
+            SET
+                name      = COALESCE($1, name),
+                cmetadata = COALESCE($2::json, cmetadata)
+            WHERE
+                name = $3
+              AND cmetadata->>'owner_id' = $4
             RETURNING uuid, name, cmetadata;
         """
-        record = await conn.fetchrow(query, update_name, metadata_json, collection_name)
+        record = await conn.fetchrow(
+            query,
+            new_name,
+            metadata_json,
+            collection_name,
+            user.identity,
+        )
 
-        if record:
-            # Parse metadata from the result
-            updated_metadata = {}
-            if record["cmetadata"] is not None and record["cmetadata"] != "null":
-                try:
-                    if isinstance(record["cmetadata"], str) and record[
-                        "cmetadata"
-                    ].startswith("{"):
-                        updated_metadata = json.loads(record["cmetadata"])
-                    else:
-                        updated_metadata = record["cmetadata"]
-                except Exception as e:
-                    logger.exception(
-                        f"Error parsing metadata in update_pgvector_collection: {e}"
-                    )
+    if not record:
+        return None
 
-            return {
-                "uuid": str(record["uuid"]),
-                "name": record["name"],
-                "metadata": updated_metadata,
-            }
+    # Parse returned cmetadata into a Python dict
+    updated_metadata: dict[str, Any] = {}
+    raw = record["cmetadata"]
+    if raw and raw != "null":
+        try:
+            if isinstance(raw, str) and raw.startswith("{"):
+                updated_metadata = json.loads(raw)
+            else:
+                updated_metadata = raw  # already a dict
+        except Exception as e:
+            logger.exception(f"Failed to parse updated metadata: {e}")
 
-    return None
+    return {
+        "uuid": str(record["uuid"]),
+        "name": record["name"],
+        "metadata": updated_metadata,
+    }

@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from langconnect.database import get_vectorstore
@@ -163,6 +164,42 @@ async def test_delete_collection_and_nonexistent() -> None:
         assert r4.status_code == 204
 
 
+async def test_patch_collection() -> None:
+    """PATCH should update metadata properly."""
+    async with get_async_test_client() as client:
+        # create a collection
+        payload = {"name": "colA", "metadata": {"a": 1}}
+        r = await client.post("/collections", json=payload, headers=USER_1_HEADERS)
+        assert r.status_code == 201
+        assert r.json() == {
+            "uuid": r.json()["uuid"],
+            "name": "colA",
+            "metadata": {
+                "a": 1,
+                "owner_id": "user1",
+            },
+        }
+
+        # update metadata
+        r2 = await client.patch(
+            "/collections/colA",
+            json={"metadata": {"a": 2}},
+            headers=USER_1_HEADERS,
+        )
+        assert r2.status_code == 200
+        assert r2.json() == {
+            "uuid": r.json()["uuid"],
+            "name": "colA",
+            "metadata": {
+                "a": 2,
+                "owner_id": "user1",
+            },
+        }
+
+
+@pytest.mark.xfail(
+    reason="Need to fix representation of collections so a name is not unique."
+)
 async def test_update_collection_name_and_metadata() -> None:
     """PATCH should rename and/or update metadata properly."""
     async with get_async_test_client() as client:

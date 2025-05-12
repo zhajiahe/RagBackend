@@ -85,27 +85,6 @@ async def collections_update(
     collection_data: CollectionUpdate,
 ):
     """Updates a specific PGVector collection's name and/or metadata."""
-    # Check ownership of collection.
-    # Check if collection exists
-    existing = await get_pgvector_collection_details(user, collection_name)
-    if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Collection '{collection_name}' not found",
-        )
-
-    # If a new name is provided, check if it already exists
-    # (unless it's the same name)
-    if collection_data.name and collection_data.name != collection_name:
-        existing_with_new_name = await get_pgvector_collection_details(
-            user, collection_data.name
-        )
-        if existing_with_new_name:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Collection with name '{collection_data.name}' already exists",
-            )
-
     # Update the collection
     updated_collection = await update_pgvector_collection(
         user,
@@ -116,7 +95,7 @@ async def collections_update(
 
     if not updated_collection:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Failed to update collection '{collection_name}'",
         )
 
