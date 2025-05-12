@@ -86,6 +86,23 @@ async def test_create_and_get_collection() -> None:
         assert get_response.status_code == 200
         assert get_response.json()["uuid"] == data["uuid"]
 
+        # Test without metadata
+        payload_no_metadata = {"name": "test_collection_no_metadata"}
+        response_no_metadata = await client.post(
+            "/collections", json=payload_no_metadata, headers=USER_1_HEADERS
+        )
+        assert response_no_metadata.status_code == 201, (
+            f"Failed with error message: {response_no_metadata.text}"
+        )
+        data_no_metadata = response_no_metadata.json()
+        assert data_no_metadata == {
+            "uuid": data_no_metadata["uuid"],
+            "name": "test_collection_no_metadata",
+            "metadata": {
+                "owner_id": "user1",
+            },
+        }
+
 
 async def test_create_and_list_collection() -> None:
     """Test creating and listing a collection."""
