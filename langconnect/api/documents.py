@@ -1,10 +1,11 @@
 import json
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from langchain_core.documents import Document
 
+from langconnect.auth import AuthenticatedUser, resolve_user
 from langconnect.database import (
     add_documents_to_vectorstore,
     delete_documents_from_vectorstore,
@@ -22,19 +23,16 @@ router = APIRouter(tags=["documents"])
 
 @router.post("/collections/{collection_name}/documents", response_model=dict[str, Any])
 async def documents_create(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
     files: list[UploadFile] = File(...),
     metadatas_json: str | None = Form(None),
 ):
     """Processes and indexes (adds) new document files with optional metadata."""
-    try:
-        collection = await get_pgvector_collection_details(collection_name)
-        if not collection:
-            raise HTTPException(status_code=404, detail="Collection not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error checking collection: {e!s}")
+    collection = await get_pgvector_collection_details(user, collection_name)
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
 
-    metadatas = []
     if metadatas_json:
         try:
             metadatas = json.loads(metadatas_json)
@@ -42,7 +40,8 @@ async def documents_create(
                 raise ValueError("Metadatas must be a list.")
             if len(metadatas) != len(files):
                 raise ValueError(
-                    f"Number of metadata objects ({len(metadatas)}) does not match number of files ({len(files)})."
+                    f"Number of metadata objects ({len(metadatas)}) "
+                    f"does not match number of files ({len(files)})."
                 )
             # Optional: Further validation to ensure each item in metadatas is a dict
             if not all(isinstance(m, dict) for m in metadatas):
@@ -76,7 +75,8 @@ async def documents_create(
                 processed_files_count += 1
             else:
                 logger.info(
-                    f"Warning: File {file.filename} resulted in no processable documents."
+                    f"Warning: File {file.filename} resulted "
+                    f"in no processable documents."
                 )
                 # Decide if this constitutes a failure
                 # failed_files.append(file.filename)
@@ -97,9 +97,10 @@ async def documents_create(
 
     # If some files failed but others succeeded, proceed with adding successful ones
     # but maybe inform the user about the failures.
-
     try:
-        added_ids = add_documents_to_vectorstore(collection_name, all_langchain_docs)
+        added_ids = add_documents_to_vectorstore(
+            user, collection_name, all_langchain_docs
+        )
         if not added_ids:
             # This might indicate a problem with the vector store itself
             raise HTTPException(
@@ -139,15 +140,18 @@ async def documents_create(
     "/collections/{collection_name}/documents", response_model=list[DocumentResponse]
 )
 async def documents_list(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     """Lists documents within a specific collection."""
-    documents = await list_documents_in_vectorstore(
-        collection_name, limit=limit, offset=offset
+    results = await list_documents_in_vectorstore(
+        user, collection_name, limit=limit, offset=offset
     )
-    return documents
+    if results is None:
+        raise HTTPException(status_code=404, detail="No such collection.")
+    return results
 
 
 @router.delete(
@@ -155,11 +159,14 @@ async def documents_list(
     response_model=dict[str, bool],
 )
 async def documents_delete(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
     document_id: str,
 ):
     """Deletes a specific document (chunk) from a collection by its vector store ID."""
-    success = await delete_documents_from_vectorstore(collection_name, [document_id])
+    success = await delete_documents_from_vectorstore(
+        user, collection_name, [document_id]
+    )
     if not success:
         raise HTTPException(
             status_code=500, detail="Failed to delete document from vector store"
@@ -172,6 +179,7 @@ async def documents_delete(
     "/collections/{collection_name}/documents/search", response_model=list[SearchResult]
 )
 def documents_search(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
     collection_name: str,
     search_query: SearchQuery,
 ):
@@ -180,6 +188,7 @@ def documents_search(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
     results = search_documents_in_vectorstore(
+        user,
         collection_name,
         query=search_query.query,
         limit=search_query.limit or 10,

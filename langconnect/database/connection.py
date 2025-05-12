@@ -11,7 +11,7 @@ from langchain_postgres.vectorstores import PGVector
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from langconnect.defaults import DEFAULT_COLLECTION_NAME, DEFAULT_EMBEDDINGS
+from langconnect.config import DEFAULT_COLLECTION_NAME, DEFAULT_EMBEDDINGS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "langchain")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "langchain")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "langchain_test")
 
-_pool: asyncpg.Pool = None
+_pool: asyncpg.Pool | None = None
 
 
 async def get_db_pool() -> asyncpg.Pool:
