@@ -1,18 +1,15 @@
 """Auth to resolve user object."""
 
 import os
-from typing import Annotated, Optional
-
-from fastapi import Depends, FastAPI
+from fastapi import Depends
 from fastapi.exceptions import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from gotrue.types import User
 from starlette.authentication import BaseUser
-from supabase import Client, create_client
+from supabase import create_client
+from typing import Annotated
 
-from langconnect.defaults import DEFAULT_TEST_USER_ID
-
-app = FastAPI()
+IS_TESTING = os.environ.get("IS_TESTING", "false").lower() == "true"
 
 security = HTTPBearer()
 
@@ -65,7 +62,6 @@ def get_current_user(authorization: str) -> User:
     """
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
-    supabase: Optional[Client] = None
 
     if not supabase_url or not supabase_key:
         raise HTTPException(status_code=500, detail="Supabase URL or key not found")
@@ -96,8 +92,9 @@ def resolve_user(
     if not credentials.credentials:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if "IS_TESTING" in os.environ:
-        return AuthenticatedUser(DEFAULT_TEST_USER_ID, "John Doe")
+    if IS_TESTING:
+        if credentials.credentials in {"user1", "user2"}:
+            return AuthenticatedUser(credentials.credentials, credentials.credentials)
 
     user = get_current_user(credentials.credentials)
 
