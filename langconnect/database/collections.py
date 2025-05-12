@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict
 
 from langconnect.auth import AuthenticatedUser
 from langconnect.database.connection import get_db_connection, get_vectorstore
@@ -77,14 +77,22 @@ async def list_pgvector_collections(user: AuthenticatedUser) -> list[dict[str, A
     return collections
 
 
+class CollectionDetails(TypedDict):
+    """TypedDict for collection details."""
+
+    uuid: str
+    """UUID of the collection."""
+    name: str
+    """Name of the collection."""
+    metadata: dict[str, Any]
+    """Metadata of the collection."""
+
+
 async def get_pgvector_collection_details(
     user: AuthenticatedUser,
     collection_name: str,
-) -> dict[str, Any] | None:
-    """Gets collection details (uuid, name, metadata) from the langchain_pg_collection table.
-
-    Filters collections by matching the owner_id in the cmetadata JSONB field with the authenticated user's identity.
-    """
+) -> CollectionDetails | None:
+    """Gets collection details (uuid, name, metadata) if it exists, None otherwise."""
     async with get_db_connection() as conn:
         query = """
             SELECT uuid, name, cmetadata 
@@ -92,6 +100,7 @@ async def get_pgvector_collection_details(
             WHERE name = $1 AND cmetadata->>'owner_id' = $2;
         """
         record = await conn.fetchrow(query, collection_name, user.identity)
+
         if record:
             # Handle cmetadata - it can be None, a string 'null', or a JSON string
             metadata = {}
@@ -123,9 +132,7 @@ async def delete_pgvector_collection(
     PGVector.delete_collection is synchronous, so run in executor.
     """
     store = get_vectorstore(collection_name)
-
     assert_collection_owner(store, user)
-
     await asyncio.to_thread(store.delete_collection)
 
 
