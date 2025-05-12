@@ -146,6 +146,7 @@ async def delete_pgvector_collection(
 
 
 async def update_pgvector_collection(
+    user: AuthenticatedUser,
     collection_name: str,
     new_name: str | None = None,
     metadata: dict[str, Any] | None = None,
@@ -162,7 +163,7 @@ async def update_pgvector_collection(
 
     """
     # First, get the existing collection to ensure it exists and to get current metadata
-    existing_collection = await get_pgvector_collection_details(collection_name)
+    existing_collection = await get_pgvector_collection_details(user, collection_name)
     if not existing_collection:
         return None
 

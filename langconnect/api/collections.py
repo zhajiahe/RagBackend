@@ -108,6 +108,7 @@ async def collections_update(
 
     # Update the collection
     updated_collection = await update_pgvector_collection(
+        user,
         collection_name=collection_name,
         new_name=collection_data.name,
         metadata=collection_data.metadata,
