@@ -1,5 +1,5 @@
-from starlette.config import Config, undefined
 from langchain_core.embeddings import Embeddings
+from starlette.config import Config, undefined
 
 env = Config()
 
@@ -17,11 +17,11 @@ def get_embeddings() -> Embeddings:
     """Get the embeddings instance based on the environment."""
     if IS_TESTING:
         from langchain_core.embeddings import DeterministicFakeEmbedding
-        return DeterministicFakeEmbedding(size=512)
-    else:
-        from langchain_openai import OpenAIEmbeddings
-        return OpenAIEmbeddings()
 
+        return DeterministicFakeEmbedding(size=512)
+    from langchain_openai import OpenAIEmbeddings
+
+    return OpenAIEmbeddings()
 
 
 DEFAULT_EMBEDDINGS = get_embeddings()

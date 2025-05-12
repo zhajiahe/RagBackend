@@ -347,6 +347,7 @@ async def test_ownership() -> None:
 
 @pytest.mark.skip(reason="Have not fixed yet.")
 async def test_documents_create_and_list_and_delete_and_search() -> None:
+    """Test creating, listing, deleting, and searching documents."""
     async with get_async_test_client() as client:
         # Create a collection for documents
         collection = "docs_test_col"
@@ -370,7 +371,8 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
         assert data["success"] is True
         # added_chunk_ids should be a non-empty list of UUIDs
         ids = data["added_chunk_ids"]
-        assert isinstance(ids, list) and ids
+        assert isinstance(ids, list)
+        assert ids
         for chunk_id in ids:
             # Validate each is a UUID string
             UUID(chunk_id)
@@ -381,7 +383,8 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
         )
         assert list_resp.status_code == 200
         docs = list_resp.json()
-        assert isinstance(docs, list) and docs
+        assert isinstance(docs, list)
+        assert docs
         # Each doc should have id and text fields
 
         assert len(docs) == 1
@@ -399,7 +402,9 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
         assert isinstance(results, list)
         # Each result should have id, score, text
         for r in results:
-            assert "id" in r and "score" in r and "text" in r
+            assert "id" in r
+            assert "score" in r
+            assert "text" in r
 
         # Delete a document
         doc_id = docs[0]["id"]
@@ -417,7 +422,8 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
         assert del_resp2.status_code in (200, 204)
 
 
-async def test_documents_create_with_invalid_metadata_json():
+async def test_documents_create_with_invalid_metadata_json() -> None:
+    """Test creating documents with invalid metadata JSON."""
     async with get_async_test_client() as client:
         # Create a collection
         col_name = "meta_test_col"
@@ -440,7 +446,8 @@ async def test_documents_create_with_invalid_metadata_json():
         assert "Invalid JSON format" in resp.json()["detail"]
 
 
-async def test_documents_search_empty_query():
+async def test_documents_search_empty_query() -> None:
+    """Test searching documents with an empty query."""
     async with get_async_test_client() as client:
         # Create a collection for search test
         col_name = "search_test_col"
@@ -460,7 +467,8 @@ async def test_documents_search_empty_query():
 
 
 @pytest.mark.skip(reason="Have not fixed yet.")
-async def test_documents_in_nonexistent_collection():
+async def test_documents_in_nonexistent_collection() -> None:
+    """Test operations on documents in a non-existent collection."""
     async with get_async_test_client() as client:
         # Try listing documents in missing collection
         list_resp = await client.get(
