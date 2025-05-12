@@ -1,8 +1,9 @@
 import json
 import logging
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from langchain_core.documents import Document
-from typing import Annotated, Any
 
 from langconnect.auth import AuthenticatedUser, resolve_user
 from langconnect.database import (
@@ -149,10 +150,7 @@ async def documents_list(
         user, collection_name, limit=limit, offset=offset
     )
     if results is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No such collection."
-        )
+        raise HTTPException(status_code=404, detail="No such collection.")
     return results
 
 

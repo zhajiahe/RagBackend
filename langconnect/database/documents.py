@@ -1,18 +1,19 @@
-import asyncpg
 import json
 import logging
 import uuid
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from typing import Any, Optional
 
+import asyncpg
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+
 from langconnect.auth import AuthenticatedUser
+from langconnect.config import DEFAULT_EMBEDDINGS
 from langconnect.database.collections import assert_ownership_of_collection
 from langconnect.database.connection import (
     get_db_connection,
     get_vectorstore,
 )
-from langconnect.config import DEFAULT_EMBEDDINGS
 
 logger = logging.getLogger(__name__)
 

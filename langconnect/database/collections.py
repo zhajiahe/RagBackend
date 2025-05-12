@@ -30,8 +30,6 @@ async def assert_ownership_of_collection(
             raise ValueError(
                 f"Multiple collections found with name '{collection_name}'."
             )
-        # If the collection exists and is owned by the user, do nothing
-        return None
 
 
 async def create_pgvector_collection(
