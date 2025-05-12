@@ -4,6 +4,9 @@ format:
 	ruff format .
 	ruff check --fix .
 
+unsafe_fixes:
+	ruff check --fix --unsafe-fixes .
+
 lint:
 	ruff check .
 	ruff format --diff

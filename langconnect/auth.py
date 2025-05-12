@@ -1,15 +1,15 @@
 """Auth to resolve user object."""
 
-import os
+from typing import Annotated
+
 from fastapi import Depends
 from fastapi.exceptions import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from gotrue.types import User
 from starlette.authentication import BaseUser
 from supabase import create_client
-from typing import Annotated
 
-IS_TESTING = os.environ.get("IS_TESTING", "false").lower() == "true"
+from langconnect import config
 
 security = HTTPBearer()
 
@@ -60,26 +60,13 @@ def get_current_user(authorization: str) -> User:
         HTTPException: With status code 500 if Supabase configuration is missing
         HTTPException: With status code 401 if token is invalid or authentication fails
     """
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+    response = supabase.auth.get_user(authorization)
+    user = response.user
 
-    if not supabase_url or not supabase_key:
-        raise HTTPException(status_code=500, detail="Supabase URL or key not found")
-
-    supabase = create_client(supabase_url, supabase_key)
-
-    try:
-        response = supabase.auth.get_user(authorization)
-        user = response.user
-
-        if not user:
-            raise HTTPException(
-                status_code=401, detail="Invalid token or user not found"
-            )
-
-        return user
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Authentication error: {e!s}")
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token or user not found")
+    return user
 
 
 def resolve_user(
@@ -92,9 +79,12 @@ def resolve_user(
     if not credentials.credentials:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if IS_TESTING:
+    if config.IS_TESTING:
         if credentials.credentials in {"user1", "user2"}:
             return AuthenticatedUser(credentials.credentials, credentials.credentials)
+        raise HTTPException(
+            status_code=401, detail="Invalid credentials or user not found"
+        )
 
     user = get_current_user(credentials.credentials)
 
