@@ -10,10 +10,10 @@ from langconnect.auth import AuthenticatedUser, resolve_user
 from langconnect.database import (
     add_documents_to_vectorstore,
     delete_documents_from_vectorstore,
-    get_collection_by_id,
     list_documents_in_vectorstore,
     search_documents_in_vectorstore,
 )
+from langconnect.database.collections import COLLECTIONS
 from langconnect.models import DocumentResponse, SearchQuery, SearchResult
 from langconnect.services import process_document
 
@@ -30,7 +30,7 @@ async def documents_create(
     metadatas_json: str | None = Form(None),
 ):
     """Processes and indexes (adds) new document files with optional metadata."""
-    collection = await get_collection_by_id(user, str(collection_id))
+    collection = await COLLECTIONS.get(user.identity, str(collection_id))
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
