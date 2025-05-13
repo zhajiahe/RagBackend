@@ -266,10 +266,10 @@ def search_documents_in_vectorstore(
 
     formatted_results = []
     for doc, score in results_with_scores:
-        doc_id = doc.metadata.get("uuid") or doc.metadata.get("id")
+        doc_id = doc.id
         formatted_results.append(
             {
-                "id": str(doc_id) if doc_id else None,
+                "id": doc_id,
                 "page_content": doc.page_content,
                 "metadata": doc.metadata,
                 "score": score,
