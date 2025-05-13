@@ -203,12 +203,12 @@ async def test_update_collection_name_and_metadata() -> None:
     """PATCH should rename and/or update metadata properly."""
     async with get_async_test_client() as client:
         # create two collections
-        cola_info = await client.post(
+        await client.post(
             "/collections",
             json={"name": "colA", "metadata": {"a": 1}},
             headers=USER_1_HEADERS,
         )
-        colb_info = await client.post(
+        await client.post(
             "/collections",
             json={"name": "colB", "metadata": {"b": 2}},
             headers=USER_1_HEADERS,

@@ -252,7 +252,7 @@ async def search_documents_in_vectorstore(
             detail=f"Collection '{collection_id}' not found or not owned by you.",
         )
     store = get_vectorstore(
-        collection_name=collection_details["name"],
+        collection_name=collection_details["table_id"],
     )
 
     results_with_scores = store.similarity_search_with_score(query, k=limit)
