@@ -5,11 +5,9 @@ from typing import Any, Optional
 
 import asyncpg
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 
 from langconnect.auth import AuthenticatedUser
-from langconnect.config import DEFAULT_EMBEDDINGS
-from langconnect.database.collections import assert_ownership_of_collection
+from langconnect.database.collections import get_collection_details_for_user
 from langconnect.database.connection import (
     get_db_connection,
     get_vectorstore,
@@ -20,26 +18,19 @@ logger = logging.getLogger(__name__)
 
 async def add_documents_to_vectorstore(
     user: AuthenticatedUser,
+    collection_id: str,
     collection_name: str,
     documents: list[Document],
-    embeddings: Embeddings = DEFAULT_EMBEDDINGS,
 ) -> list[str]:
     """Adds LangChain documents to the specified PGVector collection."""
-    await assert_ownership_of_collection(
-        user=user,
-        collection_name=collection_name,
-    )
-    store = get_vectorstore(
-        collection_name=collection_name,
-        embeddings=embeddings,
-    )
+    store = get_vectorstore(collection_name=collection_name)
     added_ids = store.add_documents(documents)
     return added_ids
 
 
 async def list_documents_in_vectorstore(
     user: AuthenticatedUser,
-    collection_name: str,
+    collection_id: str,
     limit: int = 10,
     offset: int = 0,
 ) -> list[dict[str, Any]] | None:
@@ -62,11 +53,11 @@ async def list_documents_in_vectorstore(
             # Get collection with owner check
             collection_query = """
             SELECT uuid FROM langchain_pg_collection 
-            WHERE name = $1 AND cmetadata->>'owner_id' = $2
+            WHERE uuid = $1 AND cmetadata->>'owner_id' = $2
             """
             collection_record = await conn.fetchrow(
                 collection_query,
-                collection_name,
+                collection_id,
                 user.identity if user else None,
             )
 
@@ -115,7 +106,7 @@ async def list_documents_in_vectorstore(
     except asyncpg.exceptions.UndefinedTableError:
         logger.info(
             f"Table langchain_pg_embedding or langchain_pg_collection "
-            f"not found for collection '{collection_name}'. Returning empty list."
+            f"not found for collection '{collection_id}'. Returning empty list."
         )
         return []
     except Exception as e:
@@ -125,7 +116,7 @@ async def list_documents_in_vectorstore(
     return documents
 
 
-async def get_document_from_vectorstore(
+async def get_document(
     document_id: str,
     user: AuthenticatedUser = None,
 ) -> Optional[dict[str, Any]]:
@@ -170,7 +161,7 @@ async def get_document_from_vectorstore(
 
 async def delete_documents_from_vectorstore(
     user: AuthenticatedUser,
-    collection_name: str,
+    collection_id: str,
     file_ids: list[str],
 ) -> bool:
     """Deletes all document chunks associated with the given file_ids
@@ -186,17 +177,17 @@ async def delete_documents_from_vectorstore(
             # 1. Get collection UUID with owner check
             collection_query = """
             SELECT uuid FROM langchain_pg_collection 
-            WHERE name = $1 AND cmetadata->>'owner_id' = $2
+            WHERE uuid = $1 AND cmetadata->>'owner_id' = $2
             """
             collection_record = await conn.fetchrow(
                 collection_query,
-                collection_name,
+                collection_id,
                 user.identity if user else None,
             )
 
             if not collection_record:
                 logger.info(
-                    f"Warning: Collection '{collection_name}' not found for deletion or not owned by user."
+                    f"Warning: Collection '{collection_id}' not found for deletion or not owned by user."
                 )
                 return False  # Indicate failure as collection doesn't exist or user doesn't own it
 
@@ -220,13 +211,13 @@ async def delete_documents_from_vectorstore(
                 deleted_count = int(result.split()[-1])
                 logger.info(
                     f"Deleted {deleted_count} chunks for file_ids {file_ids} in "
-                    f"collection '{collection_name}'."
+                    f"collection '{collection_id}'."
                 )
             except (IndexError, ValueError):
                 # Handle cases where the result string might be unexpected
                 logger.info(
                     f"Deletion executed for file_ids {file_ids} in "
-                    f"collection '{collection_name}', but count parsing "
+                    f"collection '{collection_id}', but count parsing "
                     f"failed. Result: {result}"
                 )
             return True  # Indicate success
@@ -234,30 +225,30 @@ async def delete_documents_from_vectorstore(
     except asyncpg.exceptions.UndefinedTableError:
         logger.info(
             f"Warning: Table langchain_pg_embedding or langchain_pg_collection not "
-            f"found for deletion in collection '{collection_name}'."
+            f"found for deletion in collection '{collection_id}'."
         )
         return False
     except Exception as e:
         logger.info(
             f"Error deleting documents by file_ids {file_ids} "
-            f"from collection {collection_name}: {e}"
+            f"from collection {collection_id}: {e}"
         )
         return False
 
 
 async def search_documents_in_vectorstore(
     user: AuthenticatedUser,
-    collection_name: str,
+    collection_id: str,
     query: str,
     limit: int = 4,
 ) -> list[dict[str, Any]]:
     """Performs semantic similarity search within the specified PGVector collection."""
-    await assert_ownership_of_collection(
+    collection_details = await get_collection_details_for_user(
         user=user,
-        collection_name=collection_name,
+        collection_id=collection_id,
     )
     store = get_vectorstore(
-        collection_name=collection_name,
+        collection_name=collection_details["name"],
     )
 
     results_with_scores = store.similarity_search_with_score(query, k=limit)

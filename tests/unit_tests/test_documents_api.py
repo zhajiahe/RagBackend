@@ -22,19 +22,21 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
     """Test creating, listing, deleting, and searching documents."""
     async with get_async_test_client() as client:
         # Create a collection for documents
-        collection = "docs_test_col"
-        col_payload = {"name": collection, "metadata": {"purpose": "doc-test"}}
+        collection_name = "docs_test_col"
+        col_payload = {"name": collection_name, "metadata": {"purpose": "doc-test"}}
         create_col = await client.post(
             "/collections", json=col_payload, headers=USER_1_HEADERS
         )
         assert create_col.status_code == 201
+        collection_data = create_col.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare a simple text file
         file_content = b"Hello world. This is a test document."
         files = [("files", ("test.txt", file_content, "text/plain"))]
         # Create documents without metadata
         resp = await client.post(
-            f"/collections/{collection}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             headers=USER_1_HEADERS,
         )
@@ -51,7 +53,7 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
 
         # List documents in collection, default limit 10
         list_resp = await client.get(
-            f"/collections/{collection}/documents", headers=USER_1_HEADERS
+            f"/collections/{collection_id}/documents", headers=USER_1_HEADERS
         )
         assert list_resp.status_code == 200
         docs = list_resp.json()
@@ -65,7 +67,7 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
         # Search documents with a valid query
         search_payload = {"query": "test document", "limit": 5}
         search_resp = await client.post(
-            f"/collections/{collection}/documents/search",
+            f"/collections/{collection_id}/documents/search",
             json=search_payload,
             headers=USER_1_HEADERS,
         )
@@ -87,7 +89,7 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
         # Delete a document
         doc_id = docs[0]["id"]
         del_resp = await client.delete(
-            f"/collections/{collection}/documents/{doc_id}",
+            f"/collections/{collection_id}/documents/{doc_id}",
             headers=USER_1_HEADERS,
         )
         assert del_resp.status_code == 200
@@ -95,7 +97,7 @@ async def test_documents_create_and_list_and_delete_and_search() -> None:
 
         # Delete non-existent document gracefully
         del_resp2 = await client.delete(
-            f"/collections/{collection}/documents/{doc_id}",
+            f"/collections/{collection_id}/documents/{doc_id}",
             headers=USER_1_HEADERS,
         )
         # Should still return success True or 200/204; here assume 200
@@ -107,17 +109,21 @@ async def test_documents_create_with_invalid_metadata_json() -> None:
     async with get_async_test_client() as client:
         # Create a collection
         col_name = "meta_test_col"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": col_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
+
         # Prepare file
         file_content = b"Sample"
         files = [("files", ("a.txt", file_content, "text/plain"))]
         # Provide invalid JSON
         resp = await client.post(
-            f"/collections/{col_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             data={"metadatas_json": "not-a-json"},
             headers=USER_1_HEADERS,
@@ -131,14 +137,18 @@ async def test_documents_search_empty_query() -> None:
     async with get_async_test_client() as client:
         # Create a collection for search test
         col_name = "search_test_col"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": col_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
+
         # Attempt search with empty query
         resp = await client.post(
-            f"/collections/{col_name}/documents/search",
+            f"/collections/{collection_id}/documents/search",
             json={"query": "", "limit": 3},
             headers=USER_1_HEADERS,
         )
@@ -150,8 +160,9 @@ async def test_documents_in_nonexistent_collection() -> None:
     """Test operations on documents in a non-existent collection."""
     async with get_async_test_client() as client:
         # Try listing documents in missing collection
+        no_such_collection = "12345678-1234-5678-1234-567812345678"
         response = await client.get(
-            "/collections/no_such_col/documents", headers=USER_1_HEADERS
+            f"/collections/{no_such_collection}/documents", headers=USER_1_HEADERS
         )
         assert response.status_code == 404
 
@@ -159,7 +170,7 @@ async def test_documents_in_nonexistent_collection() -> None:
         file_content = b"X"
         files = [("files", ("x.txt", file_content, "text/plain"))]
         upload_resp = await client.post(
-            "/collections/no_such_col/documents",
+            f"/collections/{no_such_collection}/documents",
             files=files,
             headers=USER_1_HEADERS,
         )
@@ -168,13 +179,14 @@ async def test_documents_in_nonexistent_collection() -> None:
 
         # Try deleting from missing collection/document
         del_resp = await client.delete(
-            "/collections/no_such_col/documents/abcdef", headers=USER_1_HEADERS
+            f"/collections/{no_such_collection}/documents/abcdef",
+            headers=USER_1_HEADERS,
         )
         assert del_resp.status_code == 404
 
         # Try search in missing collection
         search_resp = await client.post(
-            "/collections/no_such_col/documents/search",
+            f"/collections/{no_such_collection}/documents/search",
             json={"query": "foo"},
             headers=USER_1_HEADERS,
         )
@@ -187,11 +199,14 @@ async def test_documents_create_with_valid_text_file_and_metadata() -> None:
     async with get_async_test_client() as client:
         # Create a collection first
         collection_name = "doc_test_with_metadata"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare a text file with content
         file_content = b"This is a test document with metadata."
@@ -203,7 +218,7 @@ async def test_documents_create_with_valid_text_file_and_metadata() -> None:
 
         # Create document with metadata
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             data={"metadatas_json": metadata_json},
             headers=USER_1_HEADERS,
@@ -223,7 +238,7 @@ async def test_documents_create_with_valid_text_file_and_metadata() -> None:
 
         # Verify document was added by listing documents
         list_response = await client.get(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             headers=USER_1_HEADERS,
         )
         assert list_response.status_code == 200
@@ -242,11 +257,14 @@ async def test_documents_create_with_valid_text_file_without_metadata() -> None:
     async with get_async_test_client() as client:
         # Create a collection first
         collection_name = "doc_test_without_metadata"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare a text file with content
         file_content = b"This is a test document without metadata."
@@ -254,7 +272,7 @@ async def test_documents_create_with_valid_text_file_without_metadata() -> None:
 
         # Create document without metadata
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             headers=USER_1_HEADERS,
         )
@@ -269,7 +287,7 @@ async def test_documents_create_with_valid_text_file_without_metadata() -> None:
 
         # Verify document was added by listing documents
         list_response = await client.get(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             headers=USER_1_HEADERS,
         )
         assert list_response.status_code == 200
@@ -284,11 +302,14 @@ async def test_documents_create_with_empty_file() -> None:
     async with get_async_test_client() as client:
         # Create a collection first
         collection_name = "doc_test_empty_file"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare an empty file
         file_content = b""
@@ -296,7 +317,7 @@ async def test_documents_create_with_empty_file() -> None:
 
         # Create document with empty file
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             headers=USER_1_HEADERS,
         )
@@ -312,11 +333,14 @@ async def test_documents_create_with_invalid_metadata_format() -> None:
     async with get_async_test_client() as client:
         # Create a collection first
         collection_name = "doc_test_invalid_metadata"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare a text file with content
         file_content = b"This is a test document with invalid metadata."
@@ -327,7 +351,7 @@ async def test_documents_create_with_invalid_metadata_format() -> None:
 
         # Create document with invalid metadata
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             data={"metadatas_json": invalid_metadata},
             headers=USER_1_HEADERS,
@@ -340,7 +364,7 @@ async def test_documents_create_with_invalid_metadata_format() -> None:
         # Test with metadata that's not a list
         invalid_metadata_not_list = json.dumps({"key": "value"})
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             data={"metadatas_json": invalid_metadata_not_list},
             headers=USER_1_HEADERS,
@@ -359,8 +383,9 @@ async def test_documents_create_with_non_existent_collection() -> None:
         files = [("files", ("nonexistent.txt", file_content, "text/plain"))]
 
         # Try to create document in a non-existent collection
+        uuid = "12345678-1234-5678-1234-567812345678"
         response = await client.post(
-            "/collections/non_existent_collection/documents",
+            f"/collections/{uuid}/documents",
             files=files,
             headers=USER_1_HEADERS,
         )
@@ -375,11 +400,14 @@ async def test_documents_create_with_multiple_files():
     async with get_async_test_client() as client:
         # Create a collection first
         collection_name = "doc_test_multiple_files"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare multiple files
         files = [
@@ -389,7 +417,7 @@ async def test_documents_create_with_multiple_files():
 
         # Create document with multiple files
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             headers=USER_1_HEADERS,
         )
@@ -405,7 +433,7 @@ async def test_documents_create_with_multiple_files():
 
         # Verify documents were added by listing documents
         list_response = await client.get(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             headers=USER_1_HEADERS,
         )
         assert list_response.status_code == 200
@@ -420,11 +448,14 @@ async def test_documents_create_with_mismatched_metadata():
     async with get_async_test_client() as client:
         # Create a collection first
         collection_name = "doc_test_mismatched_metadata"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare multiple files
         files = [
@@ -438,7 +469,7 @@ async def test_documents_create_with_mismatched_metadata():
 
         # Create document with mismatched metadata
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             data={"metadatas_json": metadata_json},
             headers=USER_1_HEADERS,
@@ -454,11 +485,14 @@ async def test_documents_create_ownership_validation():
     async with get_async_test_client() as client:
         # Create a collection as USER_1
         collection_name = "doc_test_ownership"
-        await client.post(
+        collection_response = await client.post(
             "/collections",
             json={"name": collection_name, "metadata": {}},
             headers=USER_1_HEADERS,
         )
+        assert collection_response.status_code == 201
+        collection_data = collection_response.json()
+        collection_id = collection_data["uuid"]
 
         # Prepare a file
         file_content = b"This is a test document for ownership validation."
@@ -466,7 +500,7 @@ async def test_documents_create_ownership_validation():
 
         # Try to create document as USER_2
         response = await client.post(
-            f"/collections/{collection_name}/documents",
+            f"/collections/{collection_id}/documents",
             files=files,
             headers=USER_2_HEADERS,
         )
