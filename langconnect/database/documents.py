@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 async def add_documents_to_vectorstore(
-    user: AuthenticatedUser,
-    collection_id: str,
     collection_name: str,
     documents: list[Document],
 ) -> list[str]:

@@ -100,7 +100,7 @@ async def documents_create(
     # but maybe inform the user about the failures.
     try:
         added_ids = await add_documents_to_vectorstore(
-            user, str(collection_id), collection["name"], all_langchain_docs
+            collection["table_id"], all_langchain_docs
         )
 
         if not added_ids:
