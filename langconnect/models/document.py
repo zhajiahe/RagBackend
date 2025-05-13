@@ -29,7 +29,7 @@ class SearchQuery(BaseModel):
 
 
 class SearchResult(BaseModel):
-    id: str | None = None
+    id: str
     page_content: str
     metadata: dict[str, Any] | None = None
     score: float

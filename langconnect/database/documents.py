@@ -276,4 +276,3 @@ def search_documents_in_vectorstore(
             }
         )
     return formatted_results
-
