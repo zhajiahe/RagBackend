@@ -29,9 +29,7 @@ class SearchQuery(BaseModel):
 
 
 class SearchResult(BaseModel):
-    id: str
-    collection_id: str
-    content: str | None = None
+    id: str | None = None
+    page_content: str
     metadata: dict[str, Any] | None = None
-    similarity: float
-    created_at: str | None = None
+    score: float
