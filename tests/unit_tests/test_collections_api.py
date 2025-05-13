@@ -1,7 +1,5 @@
 from uuid import UUID
 
-import pytest
-
 from tests.unit_tests.fixtures import get_async_test_client
 
 USER_1_HEADERS = {
@@ -86,8 +84,8 @@ async def test_create_and_list_collection() -> None:
         assert any(c["name"] == "test_collection" for c in collections)
 
 
-async def test_create_collection_conflict() -> None:
-    """Creating a collection twice should return 409."""
+async def test_create_collections_with_identical_names() -> None:
+    """Test that collections with identical names can be created."""
     async with get_async_test_client() as client:
         payload = {"name": "dup_collection", "metadata": {"foo": "bar"}}
         # first create
@@ -96,8 +94,8 @@ async def test_create_collection_conflict() -> None:
 
         # second create with same name
         r2 = await client.post("/collections", json=payload, headers=USER_1_HEADERS)
-        assert r2.status_code == 409
-        assert "already exists" in r2.json()["detail"]
+        assert r2.status_code == 201
+        assert r1.json()["uuid"] != r2.json()["uuid"]
 
 
 async def test_create_collection_requires_auth() -> None:
@@ -201,9 +199,6 @@ async def test_patch_collection() -> None:
         }
 
 
-@pytest.mark.xfail(
-    reason="Need to fix representation of collections so a name is not unique."
-)
 async def test_update_collection_name_and_metadata() -> None:
     """PATCH should rename and/or update metadata properly."""
     async with get_async_test_client() as client:
@@ -227,12 +222,20 @@ async def test_update_collection_name_and_metadata() -> None:
         assert col_a_id is not None
 
         # try renaming colA to colB (conflict)
-        conflict = await client.patch(
+        no_conflict = await client.patch(
             f"/collections/{col_a_id}",
             json={"name": "colB"},
             headers=USER_1_HEADERS,
         )
-        assert conflict.status_code == 409
+        assert no_conflict.status_code == 200
+        assert no_conflict.json() == {
+            "metadata": {
+                "a": 1,
+                "owner_id": "user1",
+            },
+            "name": "colB",
+            "uuid": col_a_id,  # The ID should not change
+        }
 
         # rename colA to colC with new metadata (using the UUID we got earlier)
         update = await client.patch(
@@ -245,11 +248,8 @@ async def test_update_collection_name_and_metadata() -> None:
         assert body == {
             "uuid": body["uuid"],
             "name": "colC",
-            "metadata": {"x": "y"},
+            "metadata": {"x": "y", "owner_id": "user1"},
         }
-        # ensure old name is gone when querying by old name as ID
-        get_old = await client.get("/collections/colA")
-        assert get_old.status_code == 404
         # ensure we can get by the ID
         get_by_id = await client.get(f"/collections/{col_a_id}", headers=USER_1_HEADERS)
         assert get_by_id.status_code == 200
@@ -265,9 +265,9 @@ async def test_update_collection_name_and_metadata() -> None:
         )
         assert meta_update.status_code == 200
         assert meta_update.json() == {
-            "uuid": body["uuid"],
+            "uuid": col_a_id,
             "name": "colC",
-            "metadata": {"foo": "bar"},
+            "metadata": {"foo": "bar", "owner_id": "user1"},
         }
 
 

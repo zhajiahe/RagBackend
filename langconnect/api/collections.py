@@ -69,7 +69,7 @@ async def collections_update(
     updated_collection = await COLLECTIONS.update(
         user.identity,
         str(collection_id),
-        new_name=collection_data.name,
+        name=collection_data.name,
         metadata=collection_data.metadata,
     )
 
