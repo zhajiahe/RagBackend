@@ -1,15 +1,18 @@
-import json
 import logging
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from langchain_core.documents import Document
+from pydantic import TypeAdapter, ValidationError
 
 from langconnect.auth import AuthenticatedUser, resolve_user
 from langconnect.database.collections import Collection
 from langconnect.models import DocumentResponse, SearchQuery, SearchResult
 from langconnect.services import process_document
+
+# Create a TypeAdapter that enforces “list of dict”
+_metadata_adapter = TypeAdapter(list[dict[str, Any]])
 
 logger = logging.getLogger(__name__)
 
@@ -24,33 +27,26 @@ async def documents_create(
     metadatas_json: str | None = Form(None),
 ):
     """Processes and indexes (adds) new document files with optional metadata."""
-    if metadatas_json:
+    # If no metadata JSON is provided, fill with None
+    if not metadatas_json:
+        metadatas: list[dict] | list[None] = [None] * len(files)
+    else:
         try:
-            metadatas = json.loads(metadatas_json)
-            if not isinstance(metadatas, list):
-                raise ValueError("Metadatas must be a list.")
-            if len(metadatas) != len(files):
-                raise ValueError(
+            # This will both parse the JSON and check the Python types
+            # (i.e. that it's a list, and every item is a dict)
+            metadatas = _metadata_adapter.validate_json(metadatas_json)
+        except ValidationError as e:
+            # Pydantic errors include exactly what went wrong
+            raise HTTPException(status_code=400, detail=e.errors())
+        # Now just check that the list length matches
+        if len(metadatas) != len(files):
+            raise HTTPException(
+                status_code=400,
+                detail=(
                     f"Number of metadata objects ({len(metadatas)}) "
                     f"does not match number of files ({len(files)})."
-                )
-            # Optional: Further validation to ensure each item in metadatas is a dict
-            if not all(isinstance(m, dict) for m in metadatas):
-                raise ValueError("Each item in metadatas list must be a dictionary.")
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=400, detail="Invalid JSON format for metadatas."
+                ),
             )
-        except ValueError as ve:
-            raise HTTPException(status_code=400, detail=str(ve))
-        except Exception as e:
-            # Catch unexpected errors during metadata processing
-            raise HTTPException(
-                status_code=500, detail=f"Error processing metadatas: {e!s}"
-            )
-    else:
-        # If no metadata JSON is provided, create a list of Nones
-        metadatas = [None] * len(files)
 
     docs_to_index: list[Document] = []
     processed_files_count = 0
