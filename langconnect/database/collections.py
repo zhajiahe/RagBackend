@@ -1,7 +1,11 @@
-"""Module defines
+"""Module defines CollectionManager and Collection classes.
 
 1. CollectionManager: for managing collections of documents in a database.
 2. Collection: for managing the contents of a specific collection.
+
+The current implementations are based on langchain-postgres PGVector class.
+
+Replace with your own implementation or favorite vectorstore if needed.
 """
 
 import builtins
@@ -29,12 +33,15 @@ class CollectionDetails(TypedDict):
     table_id: NotRequired[str]
 
 
-class CollectionManager:
+class CollectionsManager:
     """Use to create, delete, update, and list document collections."""
+
+    def __init__(self, user_id: str) -> None:
+        """Initialize the collection manager with a user ID."""
+        self.user_id = user_id
 
     async def list(
         self,
-        user_id: str,
     ) -> list[CollectionDetails]:
         """List all collections owned by the given user, ordered by logical name."""
         async with get_db_connection() as conn:
@@ -45,7 +52,7 @@ class CollectionManager:
                 WHERE cmetadata->>'owner_id' = $1
                 ORDER BY cmetadata->>'name';
                 """,
-                user_id,
+                self.user_id,
             )
 
         result: list[CollectionDetails] = []
@@ -63,7 +70,6 @@ class CollectionManager:
 
     async def get(
         self,
-        user_id: str,
         collection_id: str,
     ) -> CollectionDetails | None:
         """Fetch a single collection by UUID, ensuring the user owns it."""
@@ -76,7 +82,7 @@ class CollectionManager:
                    AND cmetadata->>'owner_id' = $2;
                 """,
                 collection_id,
-                user_id,
+                self.user_id,
             )
 
         if not rec:
@@ -93,14 +99,12 @@ class CollectionManager:
 
     async def create(
         self,
-        user_id: str,
         collection_name: str,
         metadata: Optional[dict[str, Any]] = None,
     ) -> CollectionDetails | None:
         """Create a new collection.
 
         Args:
-            user_id: The ID of the user creating the collection.
             collection_name: The name of the new collection.
             metadata: Optional metadata for the collection.
 
@@ -109,7 +113,7 @@ class CollectionManager:
         """
         # check for existing name
         metadata = metadata.copy() if metadata else {}
-        metadata["owner_id"] = user_id
+        metadata["owner_id"] = self.user_id
         metadata["name"] = collection_name
 
         # For now just assign a random table id
@@ -128,7 +132,7 @@ class CollectionManager:
                    AND cmetadata->>'owner_id' = $2;
                 """,
                 table_id,
-                user_id,
+                self.user_id,
             )
         if not rec:
             return None
@@ -138,7 +142,6 @@ class CollectionManager:
 
     async def update(
         self,
-        user_id: str,
         collection_id: str,
         *,
         name: Optional[str] = None,
@@ -164,13 +167,13 @@ class CollectionManager:
         if metadata is not None:
             # merge in owner_id + optional new name
             merged = metadata.copy()
-            merged["owner_id"] = user_id
+            merged["owner_id"] = self.user_id
 
             if name is not None:
                 merged["name"] = name
             else:
                 # pull existing friendly name so we don't lose it
-                existing = await self.get(user_id, collection_id)
+                existing = await self.get(self.user_id, collection_id)
                 if not existing:
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
@@ -191,7 +194,7 @@ class CollectionManager:
                     """,
                     metadata_json,
                     collection_id,
-                    user_id,
+                    self.user_id,
                 )
 
         # Case 3: name only
@@ -212,7 +215,7 @@ class CollectionManager:
                     """,
                     name,
                     collection_id,
-                    user_id,
+                    self.user_id,
                 )
 
         if not rec:
@@ -232,7 +235,6 @@ class CollectionManager:
 
     async def delete(
         self,
-        user_id: str,
         collection_id: str,
     ) -> int:
         """Delete a collection by UUID.
@@ -247,13 +249,9 @@ class CollectionManager:
                    AND cmetadata->>'owner_id' = $2;
                 """,
                 collection_id,
-                user_id,
+                self.user_id,
             )
         return int(result.split()[-1])
-
-
-# Singleton collections object.
-COLLECTIONS_MANAGER = CollectionManager()
 
 
 class Collection:
@@ -268,7 +266,7 @@ class Collection:
         self.user_id = user_id
 
     async def _get_collection_details(self) -> dict[str, Any]:
-        details = await COLLECTIONS_MANAGER.get(self.user_id, self.collection_id)
+        details = await CollectionsManager(self.user_id).get(self.collection_id)
         if not details:
             raise HTTPException(status_code=404, detail="Collection not found")
         return details

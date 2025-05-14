@@ -7,24 +7,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from langchain_core.documents import Document
 
 from langconnect.auth import AuthenticatedUser, resolve_user
-from langconnect.database.collections import COLLECTIONS_MANAGER, Collection
+from langconnect.database.collections import Collection
 from langconnect.models import DocumentResponse, SearchQuery, SearchResult
 from langconnect.services import process_document
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["documents"])
-
-
-def get_collection(
-    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
-    collection_id: UUID,
-) -> Collection:
-    """Fetches a collection by its ID."""
-    collection = COLLECTIONS_MANAGER.get(user.identity, str(collection_id))
-    if not collection:
-        raise HTTPException(status_code=404, detail="No such collection.")
-    return collection
 
 
 @router.post("/collections/{collection_id}/documents", response_model=dict[str, Any])
@@ -63,7 +52,7 @@ async def documents_create(
         # If no metadata JSON is provided, create a list of Nones
         metadatas = [None] * len(files)
 
-    all_langchain_docs: list[Document] = []
+    docs_to_index: list[Document] = []
     processed_files_count = 0
     failed_files = []
 
@@ -73,7 +62,7 @@ async def documents_create(
             # Pass metadata to process_document
             langchain_docs = await process_document(file, metadata=metadata)
             if langchain_docs:
-                all_langchain_docs.extend(langchain_docs)
+                docs_to_index.extend(langchain_docs)
                 processed_files_count += 1
             else:
                 logger.info(
@@ -91,7 +80,7 @@ async def documents_create(
             # For now, let's collect failures and report them, but continue processing.
 
     # If after processing all files, none yielded documents, raise error
-    if not all_langchain_docs:
+    if not docs_to_index:
         error_detail = "Failed to process any documents from the provided files."
         if failed_files:
             error_detail += f" Files that failed processing: {', '.join(failed_files)}."
@@ -100,10 +89,11 @@ async def documents_create(
     # If some files failed but others succeeded, proceed with adding successful ones
     # but maybe inform the user about the failures.
     try:
-        added_ids = await add_documents_to_vectorstore(
-            collection["table_id"], all_langchain_docs
+        collection = Collection(
+            collection_id=str(collection_id),
+            user_id=user.identity,
         )
-
+        added_ids = await collection.upsert(docs_to_index)
         if not added_ids:
             # This might indicate a problem with the vector store itself
             raise HTTPException(
@@ -152,12 +142,11 @@ async def documents_list(
     offset: int = Query(0, ge=0),
 ):
     """Lists documents within a specific collection."""
-    results = await list_documents_in_vectorstore(
-        user, str(collection_id), limit=limit, offset=offset
+    collection = Collection(
+        collection_id=str(collection_id),
+        user_id=user.identity,
     )
-    if results is None:
-        raise HTTPException(status_code=404, detail="No such collection.")
-    return results
+    return await collection.list(limit=limit, offset=offset)
 
 
 @router.delete(
@@ -170,9 +159,13 @@ async def documents_delete(
     document_id: str,
 ):
     """Deletes a specific document from a collection by its ID."""
-    success = await delete_documents_from_vectorstore(
-        user, str(collection_id), [document_id]
+    collection = Collection(
+        collection_id=str(collection_id),
+        user_id=user.identity,
     )
+    # TODO(Eugene): Deletion logic does not look correct.
+    #  Should I be deleting by ID or file ID?
+    success = await collection.delete(document_id)
     if not success:
         raise HTTPException(status_code=404, detail="Failed to delete document.")
 
@@ -191,10 +184,13 @@ async def documents_search(
     if not search_query.query:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-    results = await search_documents_in_vectorstore(
-        user,
-        str(collection_id),
-        query=search_query.query,
+    collection = Collection(
+        collection_id=str(collection_id),
+        user_id=user.identity,
+    )
+
+    results = await collection.search(
+        search_query.query,
         limit=search_query.limit or 10,
     )
     return results
