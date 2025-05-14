@@ -7,19 +7,24 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from langchain_core.documents import Document
 
 from langconnect.auth import AuthenticatedUser, resolve_user
-from langconnect.database import (
-    add_documents_to_vectorstore,
-    delete_documents_from_vectorstore,
-    list_documents_in_vectorstore,
-    search_documents_in_vectorstore,
-)
-from langconnect.database.collections import COLLECTIONS
+from langconnect.database.collections import COLLECTIONS_MANAGER, Collection
 from langconnect.models import DocumentResponse, SearchQuery, SearchResult
 from langconnect.services import process_document
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["documents"])
+
+
+def get_collection(
+    user: Annotated[AuthenticatedUser, Depends(resolve_user)],
+    collection_id: UUID,
+) -> Collection:
+    """Fetches a collection by its ID."""
+    collection = COLLECTIONS_MANAGER.get(user.identity, str(collection_id))
+    if not collection:
+        raise HTTPException(status_code=404, detail="No such collection.")
+    return collection
 
 
 @router.post("/collections/{collection_id}/documents", response_model=dict[str, Any])
@@ -30,10 +35,6 @@ async def documents_create(
     metadatas_json: str | None = Form(None),
 ):
     """Processes and indexes (adds) new document files with optional metadata."""
-    collection = await COLLECTIONS.get(user.identity, str(collection_id))
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
-
     if metadatas_json:
         try:
             metadatas = json.loads(metadatas_json)

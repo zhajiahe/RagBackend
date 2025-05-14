@@ -1,3 +1,10 @@
+"""Module defines
+
+1. CollectionManager: for managing collections of documents in a database.
+2. Collection: for managing the contents of a specific collection.
+"""
+
+import builtins
 import json
 import logging
 import uuid
@@ -5,6 +12,7 @@ from typing import Any, NotRequired, Optional, TypedDict
 
 from fastapi import status
 from fastapi.exceptions import HTTPException
+from langchain_core.documents import Document
 
 from langconnect.database.connection import get_db_connection, get_vectorstore
 
@@ -17,12 +25,12 @@ class CollectionDetails(TypedDict):
     uuid: str
     name: str
     metadata: dict[str, Any]
-    # Temporary field used internally to work-around an issue with PGVector
+    # Temporary field used internally to workaround an issue with PGVector
     table_id: NotRequired[str]
 
 
-class Collections:
-    """Manages pgvector-backed collections, with user_id passed at runtime."""
+class CollectionManager:
+    """Use to create, delete, update, and list document collections."""
 
     async def list(
         self,
@@ -245,4 +253,151 @@ class Collections:
 
 
 # Singleton collections object.
-COLLECTIONS = Collections()
+COLLECTIONS_MANAGER = CollectionManager()
+
+
+class Collection:
+    """A collection of documents.
+
+    Use to add, delete, list, and search documents to a given collection.
+    """
+
+    def __init__(self, collection_id: str, user_id: str) -> None:
+        """Initialize the collection by collection ID."""
+        self.collection_id = collection_id
+        self.user_id = user_id
+
+    async def _get_collection_details(self) -> dict[str, Any]:
+        details = await COLLECTIONS_MANAGER.get(self.user_id, self.collection_id)
+        if not details:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        return details
+
+    async def upsert(self, documents: list[Document]) -> list[str]:
+        """Add one or more documents to the collection."""
+        details = await self._get_collection_details()
+        store = get_vectorstore(collection_name=details["table_id"])
+        added_ids = store.add_documents(documents)
+        return added_ids
+
+    async def delete(
+        self,
+        *,
+        file_id: Optional[str] = None,
+    ) -> bool:
+        """Delete embeddings by file id.
+
+        A file id identifies the original file from which the chunks were generated.
+        """
+        async with get_db_connection() as conn:
+            delete_sql = """
+                DELETE FROM langchain_pg_embedding AS lpe
+                USING langchain_pg_collection AS lpc
+                WHERE lpe.collection_id   = lpc.uuid
+                  AND lpc.uuid             = $1
+                  AND lpc.cmetadata->>'owner_id' = $2
+                  AND lpe.cmetadata->>'file_id'   = $3
+            """
+            # Params: collection UUID, user ID, file ID
+            result = await conn.execute(
+                delete_sql,
+                self.collection_id,
+                self.user_id,
+                file_id,
+            )
+            # result is like "DELETE 3"
+            deleted_count = int(result.split()[-1])
+            logger.info(f"Deleted {deleted_count} embeddings for file {file_id!r}.")
+        return True
+
+    async def list(self, *, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
+        """List one representative chunk per file (unique file_id) in this collection."""
+        async with get_db_connection() as conn:
+            rows = await conn.fetch(
+                """
+                WITH UniqueFileChunks AS (
+                  SELECT DISTINCT ON (lpe.cmetadata->>'file_id')
+                         lpe.id,
+                         lpe.cmetadata->>'file_id' AS file_id
+                    FROM langchain_pg_embedding lpe
+                    JOIN langchain_pg_collection lpc
+                      ON lpe.collection_id = lpc.uuid
+                   WHERE lpc.uuid = $1
+                     AND lpc.cmetadata->>'owner_id' = $2
+                     AND lpe.cmetadata->>'file_id' IS NOT NULL
+                   ORDER BY lpe.cmetadata->>'file_id', lpe.id
+                )
+                SELECT emb.id,
+                       emb.document,
+                       emb.cmetadata
+                  FROM langchain_pg_embedding AS emb
+                  JOIN UniqueFileChunks AS ufc
+                    ON emb.id = ufc.id
+                 ORDER BY ufc.file_id
+                 LIMIT  $3
+                 OFFSET $4
+                """,
+                self.collection_id,
+                self.user_id,
+                limit,
+                offset,
+            )
+
+        docs: list[dict[str, Any]] = []
+        for r in rows:
+            metadata = json.loads(r["cmetadata"]) if r["cmetadata"] else {}
+            docs.append(
+                {
+                    "id": str(r["id"]),
+                    "content": r["document"],
+                    "metadata": metadata,
+                    "collection_id": str(self.collection_id),
+                }
+            )
+        return docs
+
+    async def get(self, document_id: str) -> dict[str, Any]:
+        """Fetch a single chunk by its UUID, verifying collection ownership."""
+        async with get_db_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT e.uuid, e.document, e.cmetadata
+                  FROM langchain_pg_embedding e
+                  JOIN langchain_pg_collection c
+                    ON e.collection_id = c.uuid
+                 WHERE e.uuid = $1
+                   AND c.cmetadata->>'owner_id' = $2
+                   AND c.uuid = $3
+                """,
+                document_id,
+                self.user_id,
+                self.collection_id,
+            )
+        if not row:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        metadata = json.loads(row["cmetadata"]) if row["cmetadata"] else {}
+        return {
+            "id": str(row["uuid"]),
+            "content": row["document"],
+            "metadata": metadata,
+        }
+
+    async def search(
+        self, query: str, *, limit: int = 4
+    ) -> builtins.list[dict[str, Any]]:
+        """Run a semantic similarity search in the vector store.
+        Note: offset is applied client-side after retrieval.
+        """
+        details = await self._get_collection_details()
+        store = get_vectorstore(collection_name=details["table_id"])
+        results = store.similarity_search_with_score(query, k=limit)
+        return [
+            {
+                "id": doc.id,
+                "page_content": doc.page_content,
+                "metadata": doc.metadata,
+                "score": score,
+            }
+            for doc, score in results
+        ]
