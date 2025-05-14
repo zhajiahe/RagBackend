@@ -40,6 +40,16 @@ class CollectionsManager:
         """Initialize the collection manager with a user ID."""
         self.user_id = user_id
 
+    @staticmethod
+    async def setup() -> None:
+        """Set up method should run any necessary initialization code.
+
+        For example, it could run SQL migrations to create the necessary tables.
+        """
+        logger.info("Starting database initialization...")
+        get_vectorstore()
+        logger.info("Database initialization complete.")
+
     async def list(
         self,
     ) -> list[CollectionDetails]:
@@ -173,7 +183,7 @@ class CollectionsManager:
                 merged["name"] = name
             else:
                 # pull existing friendly name so we don't lose it
-                existing = await self.get(self.user_id, collection_id)
+                existing = await self.get(collection_id)
                 if not existing:
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
@@ -265,7 +275,8 @@ class Collection:
         self.collection_id = collection_id
         self.user_id = user_id
 
-    async def _get_collection_details(self) -> dict[str, Any]:
+    async def _get_details_or_raise(self) -> dict[str, Any]:
+        """Get collection details if it exists, otherwise raise an error."""
         details = await CollectionsManager(self.user_id).get(self.collection_id)
         if not details:
             raise HTTPException(status_code=404, detail="Collection not found")
@@ -273,7 +284,7 @@ class Collection:
 
     async def upsert(self, documents: list[Document]) -> list[str]:
         """Add one or more documents to the collection."""
-        details = await self._get_collection_details()
+        details = await self._get_details_or_raise()
         store = get_vectorstore(collection_name=details["table_id"])
         added_ids = store.add_documents(documents)
         return added_ids
@@ -306,6 +317,10 @@ class Collection:
             # result is like "DELETE 3"
             deleted_count = int(result.split()[-1])
             logger.info(f"Deleted {deleted_count} embeddings for file {file_id!r}.")
+
+            # For now if deleted count is 0, let's verify that the collection exists.
+            if deleted_count == 0:
+                await self._get_details_or_raise()
         return True
 
     async def list(self, *, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
@@ -328,12 +343,12 @@ class Collection:
                 SELECT emb.id,
                        emb.document,
                        emb.cmetadata
-                  FROM langchain_pg_embedding AS emb
-                  JOIN UniqueFileChunks AS ufc
-                    ON emb.id = ufc.id
-                 ORDER BY ufc.file_id
-                 LIMIT  $3
-                 OFFSET $4
+                FROM langchain_pg_embedding AS emb
+                JOIN UniqueFileChunks AS ufc
+                  ON emb.id = ufc.id
+                ORDER BY ufc.file_id
+                LIMIT  $3
+                OFFSET $4
                 """,
                 self.collection_id,
                 self.user_id,
@@ -352,6 +367,13 @@ class Collection:
                     "collection_id": str(self.collection_id),
                 }
             )
+
+        if not docs:
+            # For now, if no documents, let's check that the collection exists.
+            # It may make sense to consider this a 200 OK with empty list.
+            # And make sure its user responsibility to check that the collection
+            # exists.
+            await self._get_details_or_raise()
         return docs
 
     async def get(self, document_id: str) -> dict[str, Any]:
@@ -387,7 +409,7 @@ class Collection:
         """Run a semantic similarity search in the vector store.
         Note: offset is applied client-side after retrieval.
         """
-        details = await self._get_collection_details()
+        details = await self._get_details_or_raise()
         store = get_vectorstore(collection_name=details["table_id"])
         results = store.similarity_search_with_score(query, k=limit)
         return [

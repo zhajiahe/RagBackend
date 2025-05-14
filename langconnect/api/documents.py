@@ -165,7 +165,7 @@ async def documents_delete(
     )
     # TODO(Eugene): Deletion logic does not look correct.
     #  Should I be deleting by ID or file ID?
-    success = await collection.delete(document_id)
+    success = await collection.delete(file_id=document_id)
     if not success:
         raise HTTPException(status_code=404, detail="Failed to delete document.")
 
