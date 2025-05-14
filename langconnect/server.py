@@ -1,6 +1,4 @@
-import json
 import logging
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from langconnect.api import collections_router, documents_router
+from langconnect.config import ALLOWED_ORIGINS
 from langconnect.database.collections import CollectionsManager
 
 # Configure logging
@@ -18,15 +17,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Read allowed origins from environment variable
-ALLOW_ORIGINS_JSON = os.getenv("ALLOW_ORIGINS")
-
-if ALLOW_ORIGINS_JSON:
-    ALLOWED_ORIGINS = json.loads(ALLOW_ORIGINS_JSON.strip())
-    logger.info(f"ALLOW_ORIGINS environment variable set to: {ALLOW_ORIGINS_JSON}")
-else:
-    ALLOWED_ORIGINS = ()
-    logger.warning("ALLOW_ORIGINS environment variable not set.")
 
 # Initialize FastAPI app
 
