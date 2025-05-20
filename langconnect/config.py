@@ -44,5 +44,5 @@ if ALLOW_ORIGINS_JSON:
     ALLOWED_ORIGINS = json.loads(ALLOW_ORIGINS_JSON.strip())
     print(f"ALLOW_ORIGINS environment variable set to: {ALLOW_ORIGINS_JSON}")
 else:
-    ALLOWED_ORIGINS = ()
+    ALLOWED_ORIGINS = "http://localhost:3000"
     print("ALLOW_ORIGINS environment variable not set.")
