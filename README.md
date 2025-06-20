@@ -1,6 +1,15 @@
-# LangConnect
+[简体中文](./README_zh.md)
 
-LangConnect is a RAG (Retrieval-Augmented Generation) service built with FastAPI and LangChain. It provides a REST API for managing collections and documents, with PostgreSQL and pgvector for vector storage.
+# RagBackend
+
+RagBackend is a RAG (Retrieval-Augmented Generation) service built with FastAPI and LangChain, improved from [LangConnect](https://github.com/langchain-ai/langconnect). It provides a REST API for managing collections and documents, with PostgreSQL and pgvector for vector storage.
+
+## TODO
+
+- [ ] Modify Supabase authentication to implement local FastAPI JWT authentication.
+- [ ] Use the free `silicon-flow` embedding API by default.
+- [ ] Add local object storage with MinIO.
+- [ ] Replace `PGVector` with `langchain_postgres.PGVectorStore`.
 
 ## Features
 
@@ -19,8 +28,9 @@ LangConnect is a RAG (Retrieval-Augmented Generation) service built with FastAPI
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/langchain-ai/langconnect.git
-   cd langconnect
+   # Replace with your repository URL
+   git clone https://github.com/zhajiahe/RagBackend.git
+   cd RagBackend
    ```
 
 2. Start the services:
@@ -30,7 +40,7 @@ LangConnect is a RAG (Retrieval-Augmented Generation) service built with FastAPI
 
    This will:
    - Start a PostgreSQL database with pgvector extension
-   - Build and start the LangConnect API service
+   - Build and start the RagBackend API service
 
 3. Access the API:
    - API documentation: http://localhost:8080/docs
