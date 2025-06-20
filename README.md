@@ -8,7 +8,7 @@ RagBackend is a RAG (Retrieval-Augmented Generation) service built with FastAPI 
 
 - [x] Modify Supabase authentication to implement local FastAPI JWT authentication.
 - [x] Use the free `silicon-flow` embedding API by default.
-- [ ] Add local object storage with MinIO.
+- [x] Add local object storage with MinIO.
 - [x] Replace `PGVector` with `langchain_postgres.AsyncPGVectorStore`.
 - [ ] Support image encoding/retrieval.
 - [ ] Optimize document processing implementation to improve parsing effectiveness.
@@ -47,6 +47,7 @@ RagBackend is a RAG (Retrieval-Augmented Generation) service built with FastAPI 
 3. Access the API:
    - API documentation: http://localhost:8080/docs
    - Health check: http://localhost:8080/health
+   - MinIO Console (for file management): http://localhost:9001 (admin/minioadmin123)
 
 ### Development
 
@@ -97,6 +98,11 @@ The following environment variables can be configured in the `docker-compose.yml
 | SILICONFLOW_API_KEY | Silicon Flow API key for embeddings | "" |
 | SILICONFLOW_BASE_URL | Silicon Flow API base URL | https://api.siliconflow.cn/v1 |
 | SILICONFLOW_MODEL | Silicon Flow embedding model | BAAI/bge-m3 |
+| MINIO_ENDPOINT | MinIO server endpoint | localhost:9000 |
+| MINIO_ACCESS_KEY | MinIO access key | minioadmin |
+| MINIO_SECRET_KEY | MinIO secret key | minioadmin123 |
+| MINIO_SECURE | Use HTTPS for MinIO connection | false |
+| MINIO_BUCKET_NAME | MinIO bucket name for file storage | ragbackend-documents |
 
 ## License
 
@@ -139,3 +145,37 @@ Delete a specific document by ID.
 #### `/collections/{collection_id}/documents/search` (POST)
 
 Search for documents using semantic search.
+
+### File Management
+
+#### `/files/collections/{collection_id}/files` (GET)
+
+List all files in a specific collection.
+
+#### `/files/user/files` (GET)
+
+List all files for the authenticated user.
+
+#### `/files/collections/{collection_id}/files/stats` (GET)
+
+Get file statistics for a collection.
+
+#### `/files/user/files/stats` (GET)
+
+Get file statistics for the authenticated user.
+
+#### `/files/{file_id}/info` (GET)
+
+Get detailed information about a specific file.
+
+#### `/files/{file_id}/download` (GET)
+
+Download a file from MinIO storage.
+
+#### `/files/{file_id}/download-url` (GET)
+
+Generate a presigned download URL for a file.
+
+#### `/files/{file_id}` (DELETE)
+
+Delete a file and all associated documents.

@@ -44,15 +44,29 @@ class DocumentUpdate(TypedDict):
 class Collection:
     """Manages a vector-based collection of documents."""
 
-    def __init__(self, details: CollectionDetails):
-        """Initialize Collection with collection details."""
+    def __init__(self, collection_id: str, user_id: str, details: Optional[CollectionDetails] = None):
+        """Initialize Collection with collection and user IDs."""
+        self.collection_id = collection_id
+        self.user_id = user_id
         self._details = details
-        engine = get_vectorstore_engine()
+        
+        # If we don't have details, we'll fetch them when needed
+        if not self._details:
+            self._details = None
 
     @property
     def details(self) -> CollectionDetails:
         """Return collection details."""
+        if self._details is None:
+            # Fetch details from database if not already loaded
+            raise RuntimeError("Collection details not loaded. Use CollectionManager.get_collection() to get a fully loaded Collection.")
         return self._details
+    
+    async def _load_details(self):
+        """Load collection details from database."""
+        manager = CollectionManager()
+        collection = await manager.get_collection(self.collection_id)
+        self._details = collection._details
 
     async def similarity_search(
         self,
@@ -64,6 +78,9 @@ class Collection:
         """Perform similarity search."""
         from ragbackend import config
 
+        if not self._details:
+            await self._load_details()
+        
         embeddings = config.get_default_embeddings()
         store = await get_vectorstore(collection_name=self._details["table_id"])
         return await store.asimilarity_search(query, k=k, filter=filter)
@@ -78,12 +95,17 @@ class Collection:
         """Perform similarity search with scores."""
         from ragbackend import config
 
+        if not self._details:
+            await self._load_details()
+
         embeddings = config.get_default_embeddings()
         store = await get_vectorstore(collection_name=self._details["table_id"])
         return await store.asimilarity_search_with_score(query, k=k, filter=filter)
 
     async def add_documents(self, docs: list[Document]) -> list[str]:
         """Add documents to collection."""
+        if not self._details:
+            await self._load_details()
         store = await get_vectorstore(collection_name=self._details["table_id"])
         return await store.aadd_documents(docs)
 
@@ -94,6 +116,8 @@ class Collection:
         offset: int = 0,
     ) -> list[Document]:
         """Get documents from collection."""
+        if not self._details:
+            await self._load_details()
         store = await get_vectorstore(collection_name=self._details["table_id"])
         
         # Use the collection method to get documents
@@ -146,6 +170,8 @@ class Collection:
     async def update_document(self, doc_id: str, update: DocumentUpdate) -> bool:
         """Update a document in the collection."""
         try:
+            if not self._details:
+                await self._load_details()
             async with get_db_connection() as conn:
                 table_name = self._details["table_id"]
                 
@@ -190,6 +216,8 @@ class Collection:
     async def delete_documents(self, ids: list[str]) -> bool:
         """Delete documents from collection."""
         try:
+            if not self._details:
+                await self._load_details()
             store = await get_vectorstore(collection_name=self._details["table_id"])
             await store.adelete(ids)
             return True
@@ -200,6 +228,8 @@ class Collection:
     async def count_documents(self) -> int:
         """Count documents in collection."""
         try:
+            if not self._details:
+                await self._load_details()
             async with get_db_connection() as conn:
                 table_name = self._details["table_id"]
                 result = await conn.fetchval(f"SELECT COUNT(*) FROM vectorstore_{table_name}")
@@ -207,14 +237,136 @@ class Collection:
         except Exception as e:
             logger.error(f"Error counting documents: {e}")
             return 0
+    
+    async def upsert(self, docs: list[Document]) -> list[str]:
+        """Add documents to collection (alias for add_documents for API compatibility)."""
+        return await self.add_documents(docs)
+    
+    async def delete(self, file_id: str) -> bool:
+        """Delete documents by file_id and clean up MinIO files."""
+        try:
+            # First, get all documents with this file_id to find their IDs
+            if not self._details:
+                await self._load_details()
+                
+            async with get_db_connection() as conn:
+                table_name = self._details["table_id"]
+                
+                # Find all document IDs with this file_id
+                doc_rows = await conn.fetch(
+                    f"""
+                    SELECT custom_id FROM vectorstore_{table_name}
+                    WHERE cmetadata->>'file_id' = $1
+                    """,
+                    file_id
+                )
+                
+                if not doc_rows:
+                    logger.warning(f"No documents found with file_id: {file_id}")
+                    return False
+                
+                doc_ids = [row['custom_id'] for row in doc_rows]
+                
+                # Delete from vector store
+                success = await self.delete_documents(doc_ids)
+                
+                if success:
+                    # Delete from MinIO and file metadata
+                    from ragbackend.services.minio_service import get_minio_service
+                    from ragbackend.database.files import get_file_metadata, delete_file_metadata
+                    
+                    try:
+                        # Get file metadata to find MinIO object path
+                        file_metadata = await get_file_metadata(file_id)
+                        if file_metadata:
+                            # Delete from MinIO
+                            minio_service = get_minio_service()
+                            await minio_service.delete_file(file_metadata['object_path'])
+                            
+                            # Delete file metadata from database
+                            await delete_file_metadata(file_id)
+                            
+                            logger.info(f"Successfully deleted file {file_id} from collection {self.collection_id}")
+                        else:
+                            logger.warning(f"No file metadata found for file_id: {file_id}")
+                            
+                    except Exception as e:
+                        logger.error(f"Failed to clean up MinIO file {file_id}: {e}")
+                        # Document deletion was successful, so we still return True
+                
+                return success
+                
+        except Exception as e:
+            logger.error(f"Error deleting documents with file_id {file_id}: {e}")
+            return False
+    
+    async def search(self, query: str, limit: int = 10) -> list:
+        """Search for documents in the collection."""
+        try:
+            # Perform similarity search
+            search_results = await self.similarity_search_with_score(query, k=limit)
+            
+            # Format results for API response
+            formatted_results = []
+            for doc, score in search_results:
+                result = {
+                    "content": doc.page_content,
+                    "metadata": doc.metadata,
+                    "score": float(score)
+                }
+                formatted_results.append(result)
+            
+            return formatted_results
+            
+        except Exception as e:
+            logger.error(f"Error searching collection {self.collection_id}: {e}")
+            return []
+    
+    async def list(self, limit: int = 10, offset: int = 0) -> list:
+        """List documents in the collection with file information."""
+        try:
+            from ragbackend.database.files import get_files_by_collection
+            
+            # Get file metadata for this collection
+            files = await get_files_by_collection(
+                self.collection_id, 
+                self.user_id, 
+                limit=limit, 
+                offset=offset
+            )
+            
+            # Format for API response
+            formatted_files = []
+            for file_record in files:
+                formatted_file = {
+                    "id": file_record['file_id'],
+                    "collection_id": self.collection_id,
+                    "content": f"File: {file_record['filename']} ({file_record['file_size']} bytes)",
+                    "metadata": {
+                        "filename": file_record['filename'],
+                        "content_type": file_record['content_type'],
+                        "file_size": file_record['file_size'],
+                        "upload_time": file_record['upload_time'].isoformat() if file_record['upload_time'] else None,
+                        "object_path": file_record['object_path']
+                    },
+                    "created_at": file_record['created_at'].isoformat() if file_record['created_at'] else None,
+                    "updated_at": file_record['updated_at'].isoformat() if file_record['updated_at'] else None
+                }
+                formatted_files.append(formatted_file)
+            
+            return formatted_files
+            
+        except Exception as e:
+            logger.error(f"Error listing documents in collection {self.collection_id}: {e}")
+            return []
 
 
 class CollectionManager:
     """Manages multiple collections in a database."""
 
-    def __init__(self):
+    def __init__(self, user_id: Optional[str] = None):
         """Initialize CollectionManager."""
-        pass
+        self.user_id = user_id
 
     async def setup(self):
         """Create the collection metadata table if it doesn't exist."""
@@ -298,7 +450,11 @@ class CollectionManager:
         if row["embedding_dimensions"]:
             details["embedding_dimensions"] = row["embedding_dimensions"]
 
-        return Collection(details)
+        return Collection(
+            collection_id=collection_uuid,
+            user_id=self.user_id or "",
+            details=details
+        )
 
     async def list_collections(self) -> list[CollectionDetails]:
         """List all collections."""
@@ -379,8 +535,8 @@ class CollectionManager:
 
         return details
 
-    async def delete_collection(self, collection_uuid: str) -> bool:
-        """Delete a collection and its associated data."""
+    async def delete_collection(self, collection_uuid: str, user_id: str) -> bool:
+        """Delete a collection and its associated data, including MinIO files."""
         async with get_db_connection() as conn:
             # Get table_id first
             row = await conn.fetchrow("SELECT table_id FROM collections WHERE uuid = $1", collection_uuid)
@@ -388,6 +544,26 @@ class CollectionManager:
                 return False
 
             table_id = row["table_id"]
+
+            # Delete all files from MinIO for this collection
+            try:
+                from ragbackend.services.minio_service import get_minio_service
+                from ragbackend.database.files import delete_files_by_collection
+                
+                minio_service = get_minio_service()
+                
+                # Delete files from MinIO using the prefix pattern: user_id/collection_id/
+                minio_prefix = f"{user_id}/{collection_uuid}/"
+                deleted_files = await minio_service.delete_files_by_prefix(minio_prefix)
+                logger.info(f"Deleted {deleted_files} files from MinIO for collection {collection_uuid}")
+                
+                # Delete file metadata from database
+                deleted_metadata = await delete_files_by_collection(collection_uuid, user_id)
+                logger.info(f"Deleted {deleted_metadata} file metadata records for collection {collection_uuid}")
+                
+            except Exception as e:
+                logger.error(f"Failed to delete MinIO files for collection {collection_uuid}: {e}")
+                # Continue with collection deletion even if MinIO cleanup fails
 
             # Drop the vectorstore table
             try:
@@ -400,3 +576,11 @@ class CollectionManager:
             
             # Check if any rows were affected
             return result != "DELETE 0"
+    
+    async def delete(self, collection_uuid: str) -> bool:
+        """Delete a collection with user context (wrapper method for API compatibility)."""
+        if not self.user_id:
+            logger.warning("Attempting to delete collection without user context")
+            # Fallback to old behavior without MinIO cleanup
+            return await self.delete_collection(collection_uuid, "unknown")
+        return await self.delete_collection(collection_uuid, self.user_id)

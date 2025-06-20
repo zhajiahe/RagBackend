@@ -66,6 +66,13 @@ POSTGRES_USER = env("POSTGRES_USER", cast=str, default="langchain")
 POSTGRES_PASSWORD = env("POSTGRES_PASSWORD", cast=str, default="langchain")
 POSTGRES_DB = env("POSTGRES_DB", cast=str, default="langchain_test")
 
+# MinIO Configuration
+MINIO_ENDPOINT = env("MINIO_ENDPOINT", cast=str, default="localhost:9000")
+MINIO_ACCESS_KEY = env("MINIO_ACCESS_KEY", cast=str, default="minioadmin")
+MINIO_SECRET_KEY = env("MINIO_SECRET_KEY", cast=str, default="minioadmin123")
+MINIO_SECURE = env("MINIO_SECURE", cast=bool, default=False)
+MINIO_BUCKET_NAME = env("MINIO_BUCKET_NAME", cast=str, default="ragbackend-documents")
+
 # Read allowed origins from environment variable
 ALLOW_ORIGINS_JSON = env("ALLOW_ORIGINS", cast=str, default="")
 

@@ -55,11 +55,18 @@ async def documents_create(
     # Pair files with their corresponding metadata
     for file, metadata in zip(files, metadatas, strict=False):
         try:
-            # Pass metadata to process_document
-            langchain_docs = await process_document(file, metadata=metadata)
+            # Pass metadata to process_document with MinIO storage enabled
+            langchain_docs, file_metadata = await process_document(
+                file, 
+                metadata=metadata,
+                user_id=user.identity,
+                collection_id=str(collection_id),
+                store_original=True
+            )
             if langchain_docs:
                 docs_to_index.extend(langchain_docs)
                 processed_files_count += 1
+                logger.info(f"Successfully processed file {file.filename} with {len(langchain_docs)} document chunks")
             else:
                 logger.info(
                     f"Warning: File {file.filename} resulted "

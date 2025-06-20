@@ -8,7 +8,7 @@ RagBackend 是一个基于 FastAPI 和 LangChain 构建的 RAG (Retrieval-Augmen
 
 - [x] 修改 Supabase 认证，实现本地基于 FastAPI 的 JWT 认证。
 - [x] 默认使用免费的硅基流动（silicon-flow）向量 API。
-- [ ] 增加本地对象存储 MinIO。
+- [x] 增加本地对象存储 MinIO。
 - [x] 使用 `langchain_postgres.AsyncPGVectorStore` 替代 `PGVector`。
 - [ ] 支持图片编码/检索。
 - [ ] 优化文档处理实现，提高解析效果。
@@ -47,6 +47,7 @@ RagBackend 是一个基于 FastAPI 和 LangChain 构建的 RAG (Retrieval-Augmen
 3. 访问 API:
    - API 文档: http://localhost:8080/docs
    - 健康检查: http://localhost:8080/health
+   - MinIO 管理控制台（文件管理）: http://localhost:9001 (minioadmin/minioadmin123)
 
 ### 开发模式
 
@@ -97,6 +98,11 @@ docker-compose up
 | SILICONFLOW_API_KEY | 硅基流动 API 密钥（用于嵌入向量） | "" |
 | SILICONFLOW_BASE_URL | 硅基流动 API 基础 URL | https://api.siliconflow.cn/v1 |
 | SILICONFLOW_MODEL | 硅基流动嵌入模型 | BAAI/bge-m3 |
+| MINIO_ENDPOINT | MinIO 服务器端点 | localhost:9000 |
+| MINIO_ACCESS_KEY | MinIO 访问密钥 | minioadmin |
+| MINIO_SECRET_KEY | MinIO 秘密密钥 | minioadmin123 |
+| MINIO_SECURE | MinIO 连接是否使用 HTTPS | false |
+| MINIO_BUCKET_NAME | MinIO 文件存储桶名称 | ragbackend-documents |
 
 ## 许可证
 
@@ -138,4 +144,38 @@ docker-compose up
 
 #### `/collections/{collection_id}/documents/search` (POST)
 
-使用语义搜索来搜索文档。 
+使用语义搜索来搜索文档。
+
+### 文件管理
+
+#### `/files/collections/{collection_id}/files` (GET)
+
+列出指定集合中的所有文件。
+
+#### `/files/user/files` (GET)
+
+列出当前用户的所有文件。
+
+#### `/files/collections/{collection_id}/files/stats` (GET)
+
+获取集合的文件统计信息。
+
+#### `/files/user/files/stats` (GET)
+
+获取当前用户的文件统计信息。
+
+#### `/files/{file_id}/info` (GET)
+
+获取特定文件的详细信息。
+
+#### `/files/{file_id}/download` (GET)
+
+从MinIO存储下载文件。
+
+#### `/files/{file_id}/download-url` (GET)
+
+为文件生成预签名下载URL。
+
+#### `/files/{file_id}` (DELETE)
+
+删除文件及其关联的所有文档。 
