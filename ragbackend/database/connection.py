@@ -6,7 +6,8 @@ from typing import Any, Optional, Union
 import asyncpg
 import sqlalchemy
 from langchain_core.embeddings import Embeddings
-from langchain_postgres.vectorstores import PGVector
+from langchain_postgres.vectorstores import PGVectorStore
+from langchain_postgres import PGEngine
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -59,23 +60,25 @@ def get_vectorstore_engine(
     user: str = config.POSTGRES_USER,
     password: str = config.POSTGRES_PASSWORD,
     dbname: str = config.POSTGRES_DB,
-) -> Engine:
-    """Creates and returns a sync SQLAlchemy engine for PostgreSQL."""
+) -> PGEngine:
+    """Creates and returns a PGEngine for PostgreSQL with pgvector support."""
+    # Updated connection string to use psycopg3 (psycopg://)
     connection_string = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
-    engine = create_engine(connection_string)
+    engine = PGEngine.from_connection_string(url=connection_string)
     return engine
 
 
 DBConnection = Union[sqlalchemy.engine.Engine, str]
 
 
-def get_vectorstore(
+async def get_vectorstore(
     collection_name: str = config.DEFAULT_COLLECTION_NAME,
     embeddings: Optional[Embeddings] = None,
-    engine: Optional[Union[DBConnection, Engine, AsyncEngine]] = None,
+    engine: Optional[PGEngine] = None,
     collection_metadata: Optional[dict[str, Any]] = None,
-) -> PGVector:
-    """Initializes and returns a PGVector store for a specific collection,
+    vector_size: int = 512,
+) -> PGVectorStore:
+    """Initializes and returns a PGVectorStore for a specific collection,
     using an existing engine or creating one from connection parameters.
     """
     if engine is None:
@@ -84,11 +87,46 @@ def get_vectorstore(
     if embeddings is None:
         embeddings = config.get_default_embeddings()
 
-    store = PGVector(
-        embeddings=embeddings,
-        collection_name=collection_name,
-        connection=engine,
-        use_jsonb=True,
-        collection_metadata=collection_metadata,
+    # Initialize the vectorstore table if it doesn't exist
+    await engine.ainit_vectorstore_table(
+        table_name=collection_name,
+        vector_size=vector_size,
+    )
+
+    # Create the vectorstore using the new async PGVectorStore
+    store = await PGVectorStore.create_async(
+        engine=engine,
+        table_name=collection_name,
+        embedding_service=embeddings,
+    )
+    return store
+
+
+# 保持同步版本的函数以支持向后兼容
+def get_vectorstore_sync(
+    collection_name: str = config.DEFAULT_COLLECTION_NAME,
+    embeddings: Optional[Embeddings] = None,
+    engine: Optional[PGEngine] = None,
+    collection_metadata: Optional[dict[str, Any]] = None,
+    vector_size: int = 512,
+) -> PGVectorStore:
+    """Synchronous version for backward compatibility."""
+    if engine is None:
+        engine = get_vectorstore_engine()
+    
+    if embeddings is None:
+        embeddings = config.get_default_embeddings()
+
+    # Initialize the vectorstore table if it doesn't exist
+    engine.init_vectorstore_table(
+        table_name=collection_name,
+        vector_size=vector_size,
+    )
+
+    # Create the vectorstore using the new PGVectorStore
+    store = PGVectorStore.create_sync(
+        engine=engine,
+        table_name=collection_name,
+        embedding_service=embeddings,
     )
     return store

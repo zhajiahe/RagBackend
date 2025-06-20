@@ -1,10 +1,11 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from httpx import ASGITransport, AsyncClient
 
 from ragbackend import config
-from ragbackend.database.connection import get_vectorstore
+from ragbackend.database.connection import get_vectorstore_sync
 from ragbackend.server import APP
 
 
@@ -13,14 +14,15 @@ def reset_db() -> None:
     if config.POSTGRES_DB != "langchain_test":
         raise AssertionError(
             "Attempting to run unit tests with a non-test database. "
-            "Please set the database to 'test' before running tests."
+            "Please set the database to 'langchain_test' before running tests."
         )
     if config.POSTGRES_HOST != "localhost":
         raise AssertionError(
             "Attempting to run unit tests with a non-localhost database. "
             "Please set the host to 'localhost' before running tests."
         )
-    vectorstore = get_vectorstore()
+    # Use the synchronous version for the test setup
+    vectorstore = get_vectorstore_sync()
     # Drop table
     vectorstore.drop_tables()
     # Re-create

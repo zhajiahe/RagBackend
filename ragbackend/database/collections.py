@@ -3,7 +3,7 @@
 1. CollectionManager: for managing collections of documents in a database.
 2. Collection: for managing the contents of a specific collection.
 
-The current implementations are based on langchain-postgres PGVector class.
+The current implementations are based on langchain-postgres PGVectorStore class.
 
 Replace with your own implementation or favorite vectorstore if needed.
 """
@@ -18,7 +18,7 @@ from fastapi import status
 from fastapi.exceptions import HTTPException
 from langchain_core.documents import Document
 
-from ragbackend.database.connection import get_db_connection, get_vectorstore
+from ragbackend.database.connection import get_db_connection, get_vectorstore_engine, get_vectorstore
 
 logger = logging.getLogger(__name__)
 
@@ -26,398 +26,377 @@ logger = logging.getLogger(__name__)
 class CollectionDetails(TypedDict):
     """TypedDict for collection details."""
 
-    uuid: str
     name: str
+    uuid: str
+    table_id: str
     metadata: dict[str, Any]
-    # Temporary field used internally to workaround an issue with PGVector
-    table_id: NotRequired[str]
+    embedding_model: str
+    embedding_dimensions: NotRequired[int]
 
 
-class CollectionsManager:
-    """Use to create, delete, update, and list document collections."""
+class DocumentUpdate(TypedDict):
+    """TypedDict for document updates."""
 
-    def __init__(self, user_id: str) -> None:
-        """Initialize the collection manager with a user ID."""
-        self.user_id = user_id
-
-    @staticmethod
-    async def setup() -> None:
-        """Set up method should run any necessary initialization code.
-
-        For example, it could run SQL migrations to create the necessary tables.
-        """
-        logger.info("Starting database initialization...")
-        get_vectorstore()
-        logger.info("Database initialization complete.")
-
-    async def list(
-        self,
-    ) -> list[CollectionDetails]:
-        """List all collections owned by the given user, ordered by logical name."""
-        async with get_db_connection() as conn:
-            records = await conn.fetch(
-                """
-                SELECT uuid, cmetadata
-                FROM langchain_pg_collection
-                WHERE cmetadata->>'owner_id' = $1
-                ORDER BY cmetadata->>'name';
-                """,
-                self.user_id,
-            )
-
-        result: list[CollectionDetails] = []
-        for r in records:
-            metadata = json.loads(r["cmetadata"])
-            name = metadata.pop("name", "Unnamed")
-            result.append(
-                {
-                    "uuid": str(r["uuid"]),
-                    "name": name,
-                    "metadata": metadata,
-                }
-            )
-        return result
-
-    async def get(
-        self,
-        collection_id: str,
-    ) -> CollectionDetails | None:
-        """Fetch a single collection by UUID, ensuring the user owns it."""
-        async with get_db_connection() as conn:
-            rec = await conn.fetchrow(
-                """
-                SELECT uuid, name, cmetadata
-                  FROM langchain_pg_collection
-                 WHERE uuid = $1
-                   AND cmetadata->>'owner_id' = $2;
-                """,
-                collection_id,
-                self.user_id,
-            )
-
-        if not rec:
-            return None
-
-        metadata = json.loads(rec["cmetadata"])
-        name = metadata.pop("name", "Unnamed")
-        return {
-            "uuid": str(rec["uuid"]),
-            "name": name,
-            "metadata": metadata,
-            "table_id": rec["name"],
-        }
-
-    async def create(
-        self,
-        collection_name: str,
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> CollectionDetails | None:
-        """Create a new collection.
-
-        Args:
-            collection_name: The name of the new collection.
-            metadata: Optional metadata for the collection.
-
-        Returns:
-            Details of the created collection or None if creation failed.
-        """
-        # check for existing name
-        metadata = metadata.copy() if metadata else {}
-        metadata["owner_id"] = self.user_id
-        metadata["name"] = collection_name
-
-        # For now just assign a random table id
-        table_id = str(uuid.uuid4())
-
-        # triggers PGVector to create both the vectorstore and DB entry
-        get_vectorstore(table_id, collection_metadata=metadata)
-
-        # Fetch the newly created table.
-        async with get_db_connection() as conn:
-            rec = await conn.fetchrow(
-                """
-                SELECT uuid, name, cmetadata
-                  FROM langchain_pg_collection
-                 WHERE name = $1
-                   AND cmetadata->>'owner_id' = $2;
-                """,
-                table_id,
-                self.user_id,
-            )
-        if not rec:
-            return None
-        metadata = json.loads(rec["cmetadata"])
-        name = metadata.pop("name")
-        return {"uuid": str(rec["uuid"]), "name": name, "metadata": metadata}
-
-    async def update(
-        self,
-        collection_id: str,
-        *,
-        name: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> CollectionDetails:
-        """Update collection metadata.
-
-        Four cases:
-
-        1) metadata only          → merge in metadata, keep old JSON->'name'
-        2) metadata + new name    → merge metadata (including new 'name')
-        3) new name only          → jsonb_set the 'name' key
-        4) neither                → no-op, just fetch & return
-        """
-        # Case 4: no-op
-        if metadata is None and name is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Must update at least 1 attribute.",
-            )
-
-        # Case 1 & 2: metadata supplied (with or without new name)
-        if metadata is not None:
-            # merge in owner_id + optional new name
-            merged = metadata.copy()
-            merged["owner_id"] = self.user_id
-
-            if name is not None:
-                merged["name"] = name
-            else:
-                # pull existing friendly name so we don't lose it
-                existing = await self.get(collection_id)
-                if not existing:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Collection '{collection_id}' not found or not owned by you.",
-                    )
-                merged["name"] = existing["name"]
-
-            metadata_json = json.dumps(merged)
-
-            async with get_db_connection() as conn:
-                rec = await conn.fetchrow(
-                    """
-                    UPDATE langchain_pg_collection
-                       SET cmetadata = $1::jsonb
-                     WHERE uuid = $2
-                       AND cmetadata->>'owner_id' = $3
-                    RETURNING uuid, cmetadata;
-                    """,
-                    metadata_json,
-                    collection_id,
-                    self.user_id,
-                )
-
-        # Case 3: name only
-        else:  # metadata is None but name is not None
-            async with get_db_connection() as conn:
-                rec = await conn.fetchrow(
-                    """
-                    UPDATE langchain_pg_collection
-                       SET cmetadata = jsonb_set(
-                             cmetadata::jsonb,
-                             '{name}',
-                             to_jsonb($1::text),
-                             true
-                           )
-                     WHERE uuid = $2
-                       AND cmetadata->>'owner_id' = $3
-                    RETURNING uuid, cmetadata;
-                    """,
-                    name,
-                    collection_id,
-                    self.user_id,
-                )
-
-        if not rec:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Collection '{collection_id}' not found or not owned by you.",
-            )
-
-        full_meta = json.loads(rec["cmetadata"])
-        friendly_name = full_meta.pop("name", "Unnamed")
-
-        return {
-            "uuid": str(rec["uuid"]),
-            "name": friendly_name,
-            "metadata": full_meta,
-        }
-
-    async def delete(
-        self,
-        collection_id: str,
-    ) -> int:
-        """Delete a collection by UUID.
-        Returns number of rows deleted (1).
-        Raises 404 if no such collection.
-        """
-        async with get_db_connection() as conn:
-            result = await conn.execute(
-                """
-                DELETE FROM langchain_pg_collection
-                 WHERE uuid = $1
-                   AND cmetadata->>'owner_id' = $2;
-                """,
-                collection_id,
-                self.user_id,
-            )
-        return int(result.split()[-1])
+    page_content: NotRequired[str]
+    metadata: NotRequired[dict[str, Any]]
 
 
 class Collection:
-    """A collection of documents.
+    """Manages a vector-based collection of documents."""
 
-    Use to add, delete, list, and search documents to a given collection.
-    """
+    def __init__(self, details: CollectionDetails):
+        """Initialize Collection with collection details."""
+        self._details = details
+        engine = get_vectorstore_engine()
 
-    def __init__(self, collection_id: str, user_id: str) -> None:
-        """Initialize the collection by collection ID."""
-        self.collection_id = collection_id
-        self.user_id = user_id
+    @property
+    def details(self) -> CollectionDetails:
+        """Return collection details."""
+        return self._details
 
-    async def _get_details_or_raise(self) -> dict[str, Any]:
-        """Get collection details if it exists, otherwise raise an error."""
-        details = await CollectionsManager(self.user_id).get(self.collection_id)
-        if not details:
-            raise HTTPException(status_code=404, detail="Collection not found")
-        return details
-
-    async def upsert(self, documents: list[Document]) -> list[str]:
-        """Add one or more documents to the collection."""
-        details = await self._get_details_or_raise()
-        store = get_vectorstore(collection_name=details["table_id"])
-        added_ids = store.add_documents(documents)
-        return added_ids
-
-    async def delete(
+    async def similarity_search(
         self,
+        query: str,
         *,
-        file_id: Optional[str] = None,
-    ) -> bool:
-        """Delete embeddings by file id.
+        k: int = 4,
+        filter: Optional[dict[str, Any]] = None,
+    ) -> list[Document]:
+        """Perform similarity search."""
+        from ragbackend import config
 
-        A file id identifies the original file from which the chunks were generated.
-        """
-        async with get_db_connection() as conn:
-            delete_sql = """
-                DELETE FROM langchain_pg_embedding AS lpe
-                USING langchain_pg_collection AS lpc
-                WHERE lpe.collection_id   = lpc.uuid
-                  AND lpc.uuid             = $1
-                  AND lpc.cmetadata->>'owner_id' = $2
-                  AND lpe.cmetadata->>'file_id'   = $3
-            """
-            # Params: collection UUID, user ID, file ID
-            result = await conn.execute(
-                delete_sql,
-                self.collection_id,
-                self.user_id,
-                file_id,
-            )
-            # result is like "DELETE 3"
-            deleted_count = int(result.split()[-1])
-            logger.info(f"Deleted {deleted_count} embeddings for file {file_id!r}.")
+        embeddings = config.get_default_embeddings()
+        store = await get_vectorstore(collection_name=self._details["table_id"])
+        return await store.asimilarity_search(query, k=k, filter=filter)
 
-            # For now if deleted count is 0, let's verify that the collection exists.
-            if deleted_count == 0:
-                await self._get_details_or_raise()
-        return True
+    async def similarity_search_with_score(
+        self,
+        query: str,
+        *,
+        k: int = 4,
+        filter: Optional[dict[str, Any]] = None,
+    ) -> list[tuple[Document, float]]:
+        """Perform similarity search with scores."""
+        from ragbackend import config
 
-    async def list(self, *, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
-        """List one representative chunk per file (unique file_id) in this collection."""
-        async with get_db_connection() as conn:
-            rows = await conn.fetch(
-                """
-                WITH UniqueFileChunks AS (
-                  SELECT DISTINCT ON (lpe.cmetadata->>'file_id')
-                         lpe.id,
-                         lpe.cmetadata->>'file_id' AS file_id
-                    FROM langchain_pg_embedding lpe
-                    JOIN langchain_pg_collection lpc
-                      ON lpe.collection_id = lpc.uuid
-                   WHERE lpc.uuid = $1
-                     AND lpc.cmetadata->>'owner_id' = $2
-                     AND lpe.cmetadata->>'file_id' IS NOT NULL
-                   ORDER BY lpe.cmetadata->>'file_id', lpe.id
+        embeddings = config.get_default_embeddings()
+        store = await get_vectorstore(collection_name=self._details["table_id"])
+        return await store.asimilarity_search_with_score(query, k=k, filter=filter)
+
+    async def add_documents(self, docs: list[Document]) -> list[str]:
+        """Add documents to collection."""
+        store = await get_vectorstore(collection_name=self._details["table_id"])
+        return await store.aadd_documents(docs)
+
+    async def get_documents(
+        self,
+        ids: Optional[list[str]] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[Document]:
+        """Get documents from collection."""
+        store = await get_vectorstore(collection_name=self._details["table_id"])
+        
+        # Use the collection method to get documents
+        if ids:
+            # Get specific documents by IDs
+            return await store.aget_by_ids(ids)
+        else:
+            # Get all documents with pagination
+            # Note: This is a simplified approach, actual implementation may vary
+            # based on the specific PGVectorStore API
+            all_docs = []
+            try:
+                # Try to use a search with very broad criteria to get all documents
+                # This is a workaround since PGVectorStore might not have a direct "get all" method
+                async with get_db_connection() as conn:
+                    table_name = self._details["table_id"]
+                    
+                    # Build query with pagination
+                    query = f"""
+                        SELECT id, document, cmetadata, custom_id
+                        FROM vectorstore_{table_name}
+                        ORDER BY id
+                        OFFSET $1
+                    """
+                    
+                    if limit:
+                        query += " LIMIT $2"
+                        rows = await conn.fetch(query, offset, limit)
+                    else:
+                        rows = await conn.fetch(query, offset)
+                    
+                    for row in rows:
+                        doc_data = json.loads(row["document"]) if isinstance(row["document"], str) else row["document"]
+                        metadata = json.loads(row["cmetadata"]) if isinstance(row["cmetadata"], str) else row["cmetadata"] or {}
+                        metadata["custom_id"] = row["custom_id"]
+                        
+                        doc = Document(
+                            page_content=doc_data.get("page_content", ""),
+                            metadata=metadata
+                        )
+                        all_docs.append(doc)
+                        
+            except Exception as e:
+                logger.error(f"Error getting documents: {e}")
+                # Fallback to empty list
+                return []
+                
+            return all_docs
+
+    async def update_document(self, doc_id: str, update: DocumentUpdate) -> bool:
+        """Update a document in the collection."""
+        try:
+            async with get_db_connection() as conn:
+                table_name = self._details["table_id"]
+                
+                # First, get the existing document
+                existing_row = await conn.fetchrow(
+                    f"SELECT document, cmetadata FROM vectorstore_{table_name} WHERE custom_id = $1",
+                    doc_id
                 )
-                SELECT emb.id,
-                       emb.document,
-                       emb.cmetadata
-                FROM langchain_pg_embedding AS emb
-                JOIN UniqueFileChunks AS ufc
-                  ON emb.id = ufc.id
-                ORDER BY ufc.file_id
-                LIMIT  $3
-                OFFSET $4
-                """,
-                self.collection_id,
-                self.user_id,
-                limit,
-                offset,
-            )
+                
+                if not existing_row:
+                    return False
+                
+                # Parse existing data
+                existing_doc = json.loads(existing_row["document"]) if isinstance(existing_row["document"], str) else existing_row["document"]
+                existing_metadata = json.loads(existing_row["cmetadata"]) if isinstance(existing_row["cmetadata"], str) else existing_row["cmetadata"] or {}
+                
+                # Apply updates
+                if "page_content" in update:
+                    existing_doc["page_content"] = update["page_content"]
+                
+                if "metadata" in update:
+                    existing_metadata.update(update["metadata"])
+                
+                # Update in database
+                await conn.execute(
+                    f"""
+                    UPDATE vectorstore_{table_name}
+                    SET document = $1, cmetadata = $2
+                    WHERE custom_id = $3
+                    """,
+                    json.dumps(existing_doc),
+                    json.dumps(existing_metadata),
+                    doc_id
+                )
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error updating document {doc_id}: {e}")
+            return False
 
-        docs: list[dict[str, Any]] = []
-        for r in rows:
-            metadata = json.loads(r["cmetadata"]) if r["cmetadata"] else {}
-            docs.append(
-                {
-                    "id": str(r["id"]),
-                    "content": r["document"],
-                    "metadata": metadata,
-                    "collection_id": str(self.collection_id),
-                }
-            )
+    async def delete_documents(self, ids: list[str]) -> bool:
+        """Delete documents from collection."""
+        try:
+            store = await get_vectorstore(collection_name=self._details["table_id"])
+            await store.adelete(ids)
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting documents: {e}")
+            return False
 
-        if not docs:
-            # For now, if no documents, let's check that the collection exists.
-            # It may make sense to consider this a 200 OK with empty list.
-            # And make sure its user responsibility to check that the collection
-            # exists.
-            await self._get_details_or_raise()
-        return docs
+    async def count_documents(self) -> int:
+        """Count documents in collection."""
+        try:
+            async with get_db_connection() as conn:
+                table_name = self._details["table_id"]
+                result = await conn.fetchval(f"SELECT COUNT(*) FROM vectorstore_{table_name}")
+                return result or 0
+        except Exception as e:
+            logger.error(f"Error counting documents: {e}")
+            return 0
 
-    async def get(self, document_id: str) -> dict[str, Any]:
-        """Fetch a single chunk by its UUID, verifying collection ownership."""
+
+class CollectionManager:
+    """Manages multiple collections in a database."""
+
+    def __init__(self):
+        """Initialize CollectionManager."""
+        pass
+
+    async def setup(self):
+        """Create the collection metadata table if it doesn't exist."""
         async with get_db_connection() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT e.uuid, e.document, e.cmetadata
-                  FROM langchain_pg_embedding e
-                  JOIN langchain_pg_collection c
-                    ON e.collection_id = c.uuid
-                 WHERE e.uuid = $1
-                   AND c.cmetadata->>'owner_id' = $2
-                   AND c.uuid = $3
-                """,
-                document_id,
-                self.user_id,
-                self.collection_id,
-            )
-        if not row:
-            raise HTTPException(status_code=404, detail="Document not found")
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS collections (
+                    uuid UUID PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    table_id TEXT NOT NULL UNIQUE,
+                    metadata JSONB,
+                    embedding_model TEXT NOT NULL,
+                    embedding_dimensions INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        metadata = json.loads(row["cmetadata"]) if row["cmetadata"] else {}
-        return {
-            "id": str(row["uuid"]),
-            "content": row["document"],
-            "metadata": metadata,
+    async def create_collection(
+        self,
+        name: str,
+        metadata: Optional[dict[str, Any]] = None,
+        embedding_model: str = "default",
+        embedding_dimensions: Optional[int] = None,
+    ) -> CollectionDetails:
+        """Create a new collection."""
+        collection_uuid = str(uuid.uuid4())
+        table_id = f"collection_{collection_uuid.replace('-', '_')}"
+
+        details: CollectionDetails = {
+            "name": name,
+            "uuid": collection_uuid,
+            "table_id": table_id,
+            "metadata": metadata or {},
+            "embedding_model": embedding_model,
         }
 
-    async def search(
-        self, query: str, *, limit: int = 4
-    ) -> builtins.list[dict[str, Any]]:
-        """Run a semantic similarity search in the vector store.
-        Note: offset is applied client-side after retrieval.
-        """
-        details = await self._get_details_or_raise()
-        store = get_vectorstore(collection_name=details["table_id"])
-        results = store.similarity_search_with_score(query, k=limit)
-        return [
-            {
-                "id": doc.id,
-                "page_content": doc.page_content,
-                "metadata": doc.metadata,
-                "score": score,
+        if embedding_dimensions:
+            details["embedding_dimensions"] = embedding_dimensions
+
+        # Create vectorstore table
+        store = await get_vectorstore(collection_name=table_id)
+
+        # Insert collection metadata
+        async with get_db_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO collections (uuid, name, table_id, metadata, embedding_model, embedding_dimensions)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                collection_uuid,
+                name,
+                table_id,
+                json.dumps(metadata or {}),
+                embedding_model,
+                embedding_dimensions,
+            )
+
+        return details
+
+    async def get_collection(self, collection_uuid: str) -> Collection:
+        """Get a collection by UUID."""
+        async with get_db_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT uuid, name, table_id, metadata, embedding_model, embedding_dimensions FROM collections WHERE uuid = $1",
+                collection_uuid,
+            )
+
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection {collection_uuid} not found",
+            )
+
+        details: CollectionDetails = {
+            "uuid": str(row["uuid"]),
+            "name": row["name"],
+            "table_id": row["table_id"],
+            "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
+            "embedding_model": row["embedding_model"],
+        }
+
+        if row["embedding_dimensions"]:
+            details["embedding_dimensions"] = row["embedding_dimensions"]
+
+        return Collection(details)
+
+    async def list_collections(self) -> list[CollectionDetails]:
+        """List all collections."""
+        async with get_db_connection() as conn:
+            rows = await conn.fetch(
+                "SELECT uuid, name, table_id, metadata, embedding_model, embedding_dimensions FROM collections ORDER BY name"
+            )
+
+        collections = []
+        for row in rows:
+            details: CollectionDetails = {
+                "uuid": str(row["uuid"]),
+                "name": row["name"],
+                "table_id": row["table_id"],
+                "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
+                "embedding_model": row["embedding_model"],
             }
-            for doc, score in results
-        ]
+
+            if row["embedding_dimensions"]:
+                details["embedding_dimensions"] = row["embedding_dimensions"]
+
+            collections.append(details)
+
+        return collections
+
+    async def update_collection(
+        self,
+        collection_uuid: str,
+        name: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> CollectionDetails:
+        """Update collection metadata."""
+        async with get_db_connection() as conn:
+            # Check if collection exists
+            existing = await conn.fetchrow("SELECT * FROM collections WHERE uuid = $1", collection_uuid)
+            if not existing:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Collection {collection_uuid} not found",
+                )
+
+            # Update fields
+            updates = []
+            values = []
+            counter = 1
+
+            if name is not None:
+                updates.append(f"name = ${counter}")
+                values.append(name)
+                counter += 1
+
+            if metadata is not None:
+                updates.append(f"metadata = ${counter}")
+                values.append(json.dumps(metadata))
+                counter += 1
+
+            if updates:
+                values.append(collection_uuid)
+                query = f"UPDATE collections SET {', '.join(updates)} WHERE uuid = ${counter}"
+                await conn.execute(query, *values)
+
+            # Return updated details
+            row = await conn.fetchrow(
+                "SELECT uuid, name, table_id, metadata, embedding_model, embedding_dimensions FROM collections WHERE uuid = $1",
+                collection_uuid,
+            )
+
+        details: CollectionDetails = {
+            "uuid": str(row["uuid"]),
+            "name": row["name"],
+            "table_id": row["table_id"],
+            "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
+            "embedding_model": row["embedding_model"],
+        }
+
+        if row["embedding_dimensions"]:
+            details["embedding_dimensions"] = row["embedding_dimensions"]
+
+        return details
+
+    async def delete_collection(self, collection_uuid: str) -> bool:
+        """Delete a collection and its associated data."""
+        async with get_db_connection() as conn:
+            # Get table_id first
+            row = await conn.fetchrow("SELECT table_id FROM collections WHERE uuid = $1", collection_uuid)
+            if not row:
+                return False
+
+            table_id = row["table_id"]
+
+            # Drop the vectorstore table
+            try:
+                await conn.execute(f"DROP TABLE IF EXISTS vectorstore_{table_id}")
+            except Exception as e:
+                logger.warning(f"Could not drop table vectorstore_{table_id}: {e}")
+
+            # Delete from collections metadata
+            result = await conn.execute("DELETE FROM collections WHERE uuid = $1", collection_uuid)
+            
+            # Check if any rows were affected
+            return result != "DELETE 0"
