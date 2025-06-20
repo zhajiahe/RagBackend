@@ -5,11 +5,11 @@ from typing import Annotated
 from fastapi import Depends
 from fastapi.exceptions import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from gotrue.types import User
 from starlette.authentication import BaseUser
-from supabase import create_client
 
 from ragbackend import config
+from ragbackend.services.jwt_service import verify_token
+from ragbackend.database.users import get_user_by_id
 
 security = HTTPBearer()
 
@@ -43,33 +43,40 @@ class AuthenticatedUser(BaseUser):
         return self.user_id
 
 
-def get_current_user(authorization: str) -> User:
-    """Authenticate a user by validating their JWT token against Supabase.
+async def get_current_user(authorization: str) -> dict:
+    """Authenticate a user by validating their JWT token.
 
-    This function verifies the provided JWT token by making a request to Supabase.
-    It requires the SUPABASE_URL and SUPABASE_KEY environment variables to be
-    properly configured.
+    This function verifies the provided JWT token and retrieves the user
+    from the database.
 
     Args:
         authorization: JWT token string to validate
 
     Returns:
-        User: A Supabase User object containing the authenticated user's information
+        dict: A user dictionary containing the authenticated user's information
 
     Raises:
-        HTTPException: With status code 500 if Supabase configuration is missing
         HTTPException: With status code 401 if token is invalid or authentication fails
     """
-    supabase = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
-    response = supabase.auth.get_user(authorization)
-    user = response.user
-
+    payload = verify_token(authorization)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+    
+    user = await get_user_by_id(user_id)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid token or user not found")
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    if not user.get("is_active"):
+        raise HTTPException(status_code=401, detail="User account is inactive")
+    
     return user
 
 
-def resolve_user(
+async def resolve_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ) -> AuthenticatedUser | None:
     """Resolve user from the credentials."""
@@ -86,9 +93,9 @@ def resolve_user(
             status_code=401, detail="Invalid credentials or user not found"
         )
 
-    user = get_current_user(credentials.credentials)
+    user = await get_current_user(credentials.credentials)
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return AuthenticatedUser(user.id, user.user_metadata.get("name", "User"))
+    return AuthenticatedUser(user["id"], user.get("full_name") or user["username"])

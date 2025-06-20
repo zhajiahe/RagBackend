@@ -7,12 +7,10 @@ env = Config()
 
 IS_TESTING = env("IS_TESTING", cast=str, default="").lower() == "true"
 
-if IS_TESTING:
-    SUPABASE_URL = ""
-    SUPABASE_KEY = ""
-else:
-    SUPABASE_URL = env("SUPABASE_URL", cast=str, default=undefined)
-    SUPABASE_KEY = env("SUPABASE_KEY", cast=str, default=undefined)
+# JWT Configuration
+SECRET_KEY = env("SECRET_KEY", cast=str, default="your-secret-key-change-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = env("ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=60 * 24 * 7)  # 7 days
 
 
 def get_embeddings() -> Embeddings:
@@ -21,12 +19,26 @@ def get_embeddings() -> Embeddings:
         from langchain_core.embeddings import DeterministicFakeEmbedding
 
         return DeterministicFakeEmbedding(size=512)
-    from langchain_openai import OpenAIEmbeddings
+    
+    try:
+        from langchain_openai import OpenAIEmbeddings
+        return OpenAIEmbeddings()
+    except ImportError:
+        # Fallback to fake embedding if OpenAI is not available
+        from langchain_core.embeddings import DeterministicFakeEmbedding
+        return DeterministicFakeEmbedding(size=512)
 
-    return OpenAIEmbeddings()
+
+# Initialize embeddings lazily to avoid import errors
+DEFAULT_EMBEDDINGS = None
 
 
-DEFAULT_EMBEDDINGS = get_embeddings()
+def get_default_embeddings() -> Embeddings:
+    """Get the default embeddings instance, initializing if needed."""
+    global DEFAULT_EMBEDDINGS
+    if DEFAULT_EMBEDDINGS is None:
+        DEFAULT_EMBEDDINGS = get_embeddings()
+    return DEFAULT_EMBEDDINGS
 DEFAULT_COLLECTION_NAME = "default_collection"
 
 

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ragbackend.auth import AuthenticatedUser, resolve_user
 from ragbackend.database.collections import CollectionsManager
-from ragbackend.models import CollectionCreate, CollectionResponse, CollectionUpdate
+from ragbackend.schemas import CollectionCreate, CollectionResponse, CollectionUpdate
 
 router = APIRouter(prefix="/collections", tags=["collections"])
 

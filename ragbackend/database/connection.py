@@ -71,7 +71,7 @@ DBConnection = Union[sqlalchemy.engine.Engine, str]
 
 def get_vectorstore(
     collection_name: str = config.DEFAULT_COLLECTION_NAME,
-    embeddings: Embeddings = config.DEFAULT_EMBEDDINGS,
+    embeddings: Optional[Embeddings] = None,
     engine: Optional[Union[DBConnection, Engine, AsyncEngine]] = None,
     collection_metadata: Optional[dict[str, Any]] = None,
 ) -> PGVector:
@@ -80,6 +80,9 @@ def get_vectorstore(
     """
     if engine is None:
         engine = get_vectorstore_engine()
+    
+    if embeddings is None:
+        embeddings = config.get_default_embeddings()
 
     store = PGVector(
         embeddings=embeddings,

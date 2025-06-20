@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ragbackend.api import collections_router, documents_router
+from ragbackend.api.auth import router as auth_router
 from ragbackend.config import ALLOWED_ORIGINS
 from ragbackend.database.collections import CollectionsManager
 
@@ -26,6 +27,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for FastAPI application."""
     logger.info("App is starting up. Creating background worker...")
     await CollectionsManager.setup()
+    
+    # Create users table
+    from ragbackend.database.users import create_users_table
+    await create_users_table()
+    logger.info("Users table created successfully.")
+    
     yield
     logger.info("App is shutting down. Stopping background worker...")
 
@@ -47,6 +54,7 @@ APP.add_middleware(
 )
 
 # Include API routers
+APP.include_router(auth_router)
 APP.include_router(collections_router)
 APP.include_router(documents_router)
 

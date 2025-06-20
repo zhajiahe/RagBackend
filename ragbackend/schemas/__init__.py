@@ -1,14 +1,22 @@
-from ragbackend.models.collection import (
+from ragbackend.schemas.collection import (
     CollectionCreate,
     CollectionResponse,
     CollectionUpdate,
 )
-from ragbackend.models.document import (
+from ragbackend.schemas.document import (
     DocumentCreate,
     DocumentResponse,
     DocumentUpdate,
     SearchQuery,
     SearchResult,
+)
+from ragbackend.schemas.users import (
+    UserBase,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    Token,
+    TokenData,
 )
 
 __all__ = [
@@ -20,4 +28,10 @@ __all__ = [
     "DocumentUpdate",
     "SearchQuery",
     "SearchResult",
+    "UserBase",
+    "UserCreate", 
+    "UserLogin",
+    "UserResponse",
+    "Token",
+    "TokenData",
 ]

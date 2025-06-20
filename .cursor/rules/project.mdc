@@ -13,6 +13,7 @@ alwaysApply: true
 
 # 文档编写规则
 1. 检查docs文件夹下的文档，每次若有更新代码，都需要更新相应的文档
+2. 
 
 # Python环境
 1. 本项目使用uv管理环境（source .venv/bin/activate）

@@ -8,7 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from ragbackend.auth import AuthenticatedUser, resolve_user
 from ragbackend.database.collections import Collection
-from ragbackend.models import DocumentResponse, SearchQuery, SearchResult
+from ragbackend.schemas import DocumentResponse, SearchQuery, SearchResult
 from ragbackend.services import process_document
 
 # Create a TypeAdapter that enforces “list of dict”
