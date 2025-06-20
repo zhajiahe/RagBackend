@@ -917,7 +917,7 @@ wheels = [
 ]
 
 [[package]]
-name = "langconnect"
+name = "ragbackend"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [

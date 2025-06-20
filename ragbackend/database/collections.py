@@ -18,7 +18,7 @@ from fastapi import status
 from fastapi.exceptions import HTTPException
 from langchain_core.documents import Document
 
-from langconnect.database.connection import get_db_connection, get_vectorstore
+from ragbackend.database.connection import get_db_connection, get_vectorstore
 
 logger = logging.getLogger(__name__)
 

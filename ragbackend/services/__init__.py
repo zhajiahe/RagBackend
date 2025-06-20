@@ -1,4 +1,4 @@
-from langconnect.services.document_processor import (
+from ragbackend.services.document_processor import (
     SUPPORTED_MIMETYPES,
     process_document,
 )

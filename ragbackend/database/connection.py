@@ -10,7 +10,7 @@ from langchain_postgres.vectorstores import PGVector
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from langconnect import config
+from ragbackend import config
 
 logger = logging.getLogger(__name__)
 

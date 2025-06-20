@@ -9,7 +9,7 @@ from gotrue.types import User
 from starlette.authentication import BaseUser
 from supabase import create_client
 
-from langconnect import config
+from ragbackend import config
 
 security = HTTPBearer()
 

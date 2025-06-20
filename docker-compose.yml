@@ -1,7 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: langconnect-postgres
+    container_name: ragbackend-postgres
     restart: always
     ports:
       - "5432:5432"
@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: langconnect-api
+    container_name: ragbackend-api
     restart: always
     depends_on:
       postgres:
@@ -37,7 +37,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     volumes:
-      - ./langconnect:/app/langconnect
+      - ./ragbackend:/app/ragbackend
     
 volumes:
   postgres_data:

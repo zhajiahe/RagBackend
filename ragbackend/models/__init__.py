@@ -1,9 +1,9 @@
-from langconnect.models.collection import (
+from ragbackend.models.collection import (
     CollectionCreate,
     CollectionResponse,
     CollectionUpdate,
 )
-from langconnect.models.document import (
+from ragbackend.models.document import (
     DocumentCreate,
     DocumentResponse,
     DocumentUpdate,

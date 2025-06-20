@@ -5,9 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from langconnect.api import collections_router, documents_router
-from langconnect.config import ALLOWED_ORIGINS
-from langconnect.database.collections import CollectionsManager
+from ragbackend.api import collections_router, documents_router
+from ragbackend.config import ALLOWED_ORIGINS
+from ragbackend.database.collections import CollectionsManager
 
 # Configure logging
 logging.basicConfig(
@@ -60,4 +60,4 @@ async def health_check() -> dict:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("langconnect.server:APP", host="0.0.0.0", port=8080)
+    uvicorn.run("ragbackend.server:APP", host="0.0.0.0", port=8080)

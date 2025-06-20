@@ -50,4 +50,4 @@ restart:
 
 clean:
 	docker-compose down -v
-	docker rmi langconnect-api:latest 2>/dev/null || true
+	docker rmi ragbackend-api:latest 2>/dev/null || true

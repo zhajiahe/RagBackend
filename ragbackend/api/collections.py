@@ -3,9 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from langconnect.auth import AuthenticatedUser, resolve_user
-from langconnect.database.collections import CollectionsManager
-from langconnect.models import CollectionCreate, CollectionResponse, CollectionUpdate
+from ragbackend.auth import AuthenticatedUser, resolve_user
+from ragbackend.database.collections import CollectionsManager
+from ragbackend.models import CollectionCreate, CollectionResponse, CollectionUpdate
 
 router = APIRouter(prefix="/collections", tags=["collections"])
 

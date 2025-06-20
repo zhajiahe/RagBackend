@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 
 from httpx import ASGITransport, AsyncClient
 
-from langconnect import config
-from langconnect.database.connection import get_vectorstore
-from langconnect.server import APP
+from ragbackend import config
+from ragbackend.database.connection import get_vectorstore
+from ragbackend.server import APP
 
 
 def reset_db() -> None:

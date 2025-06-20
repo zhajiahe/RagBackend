@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from langchain_core.documents import Document
 from pydantic import TypeAdapter, ValidationError
 
-from langconnect.auth import AuthenticatedUser, resolve_user
-from langconnect.database.collections import Collection
-from langconnect.models import DocumentResponse, SearchQuery, SearchResult
-from langconnect.services import process_document
+from ragbackend.auth import AuthenticatedUser, resolve_user
+from ragbackend.database.collections import Collection
+from ragbackend.models import DocumentResponse, SearchQuery, SearchResult
+from ragbackend.services import process_document
 
 # Create a TypeAdapter that enforces “list of dict”
 _metadata_adapter = TypeAdapter(list[dict[str, Any]])

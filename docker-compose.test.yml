@@ -1,7 +1,7 @@
 services:
   postgres_test:
     image: pgvector/pgvector:pg16
-    container_name: langconnect-postgres-test
+    container_name: ragbackend-postgres-test
     ports:
       - "5432:5432"
     environment:
