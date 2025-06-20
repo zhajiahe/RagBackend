@@ -12,14 +12,31 @@ SECRET_KEY = env("SECRET_KEY", cast=str, default="your-secret-key-change-in-prod
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = env("ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=60 * 24 * 7)  # 7 days
 
+# Silicon Flow Configuration
+SILICONFLOW_API_KEY = env("SILICONFLOW_API_KEY", cast=str, default="")
+SILICONFLOW_BASE_URL = env("SILICONFLOW_BASE_URL", cast=str, default="https://api.siliconflow.cn/v1")
+SILICONFLOW_MODEL = env("SILICONFLOW_MODEL", cast=str, default="BAAI/bge-m3")
+
 
 def get_embeddings() -> Embeddings:
     """Get the embeddings instance based on the environment."""
     if IS_TESTING:
         from langchain_core.embeddings import DeterministicFakeEmbedding
-
         return DeterministicFakeEmbedding(size=512)
     
+    # 优先使用硅基流动的嵌入API
+    if SILICONFLOW_API_KEY:
+        try:
+            from langchain_openai import OpenAIEmbeddings
+            return OpenAIEmbeddings(
+                api_key=SILICONFLOW_API_KEY,
+                base_url=SILICONFLOW_BASE_URL,
+                model=SILICONFLOW_MODEL,
+            )
+        except ImportError:
+            print("Warning: langchain_openai not available, falling back to OpenAI")
+    
+    # 回退到OpenAI
     try:
         from langchain_openai import OpenAIEmbeddings
         return OpenAIEmbeddings()

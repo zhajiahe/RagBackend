@@ -7,9 +7,9 @@ RagBackend 是一个基于 FastAPI 和 LangChain 构建的 RAG (Retrieval-Augmen
 ## TODO
 
 - [x] 修改 Supabase 认证，实现本地基于 FastAPI 的 JWT 认证。
-- [ ] 默认使用免费的硅基流动（silicon-flow）向量 API。
+- [x] 默认使用免费的硅基流动（silicon-flow）向量 API。
 - [ ] 增加本地对象存储 MinIO。
-- [x] 使用 `langchain_postgres.PGVectorStore` 替代 `PGVector`。
+- [x] 使用 `langchain_postgres.AsyncPGVectorStore` 替代 `PGVector`。
 - [ ] 支持图片编码/检索。
 - [ ] 优化文档处理实现，提高解析效果。
 
@@ -56,6 +56,29 @@ RagBackend 是一个基于 FastAPI 和 LangChain 构建的 RAG (Retrieval-Augmen
 docker-compose up
 ```
 
+## 硅基流动配置
+
+本项目现在支持免费的硅基流动嵌入 API 作为默认选项。使用硅基流动：
+
+1. 访问 [硅基流动](https://siliconflow.cn/) 并创建账户
+2. 从控制台获取您的 API 密钥
+3. 设置环境变量：
+   ```bash
+   export SILICONFLOW_API_KEY=your_api_key_here
+   # 可选：自定义模型（默认为 BAAI/bge-m3）
+   export SILICONFLOW_MODEL=BAAI/bge-large-zh-v1.5
+   ```
+
+**可用模型：**
+- `BAAI/bge-m3` - 多语言支持，支持 100+ 种语言，最多 8192 tokens（默认）
+- `BAAI/bge-large-zh-v1.5` - 中文优化
+- `BAAI/bge-large-en-v1.5` - 英文优化
+
+**免费版本优势：**
+- 免费嵌入 API 使用
+- 高质量向量，性能优异
+- 支持多语言和长文本
+
 ## API 文档
 
 服务运行时，API 文档可在 http://localhost:8080/docs 查看。
@@ -71,6 +94,9 @@ docker-compose up
 | POSTGRES_USER | PostgreSQL 用户名 | postgres |
 | POSTGRES_PASSWORD | PostgreSQL 密码 | postgres |
 | POSTGRES_DB | PostgreSQL 数据库名 | postgres |
+| SILICONFLOW_API_KEY | 硅基流动 API 密钥（用于嵌入向量） | "" |
+| SILICONFLOW_BASE_URL | 硅基流动 API 基础 URL | https://api.siliconflow.cn/v1 |
+| SILICONFLOW_MODEL | 硅基流动嵌入模型 | BAAI/bge-m3 |
 
 ## 许可证
 

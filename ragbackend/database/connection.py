@@ -6,8 +6,7 @@ from typing import Any, Optional, Union
 import asyncpg
 import sqlalchemy
 from langchain_core.embeddings import Embeddings
-from langchain_postgres.vectorstores import PGVectorStore
-from langchain_postgres import PGEngine
+from langchain_postgres import PGEngine, AsyncPGVectorStore
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -77,8 +76,8 @@ async def get_vectorstore(
     engine: Optional[PGEngine] = None,
     collection_metadata: Optional[dict[str, Any]] = None,
     vector_size: int = 512,
-) -> PGVectorStore:
-    """Initializes and returns a PGVectorStore for a specific collection,
+) -> AsyncPGVectorStore:
+    """Initializes and returns a AsyncPGVectorStore for a specific collection,
     using an existing engine or creating one from connection parameters.
     """
     if engine is None:
@@ -93,40 +92,11 @@ async def get_vectorstore(
         vector_size=vector_size,
     )
 
-    # Create the vectorstore using the new async PGVectorStore
-    store = await PGVectorStore.create_async(
+    # Create the vectorstore using the new async AsyncPGVectorStore
+    store = await AsyncPGVectorStore.create(
         engine=engine,
         table_name=collection_name,
         embedding_service=embeddings,
     )
     return store
 
-
-# 保持同步版本的函数以支持向后兼容
-def get_vectorstore_sync(
-    collection_name: str = config.DEFAULT_COLLECTION_NAME,
-    embeddings: Optional[Embeddings] = None,
-    engine: Optional[PGEngine] = None,
-    collection_metadata: Optional[dict[str, Any]] = None,
-    vector_size: int = 512,
-) -> PGVectorStore:
-    """Synchronous version for backward compatibility."""
-    if engine is None:
-        engine = get_vectorstore_engine()
-    
-    if embeddings is None:
-        embeddings = config.get_default_embeddings()
-
-    # Initialize the vectorstore table if it doesn't exist
-    engine.init_vectorstore_table(
-        table_name=collection_name,
-        vector_size=vector_size,
-    )
-
-    # Create the vectorstore using the new PGVectorStore
-    store = PGVectorStore.create_sync(
-        engine=engine,
-        table_name=collection_name,
-        embedding_service=embeddings,
-    )
-    return store

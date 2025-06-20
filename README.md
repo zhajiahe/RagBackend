@@ -7,9 +7,9 @@ RagBackend is a RAG (Retrieval-Augmented Generation) service built with FastAPI 
 ## TODO
 
 - [x] Modify Supabase authentication to implement local FastAPI JWT authentication.
-- [ ] Use the free `silicon-flow` embedding API by default.
+- [x] Use the free `silicon-flow` embedding API by default.
 - [ ] Add local object storage with MinIO.
-- [x] Replace `PGVector` with `langchain_postgres.PGVectorStore`.
+- [x] Replace `PGVector` with `langchain_postgres.AsyncPGVectorStore`.
 - [ ] Support image encoding/retrieval.
 - [ ] Optimize document processing implementation to improve parsing effectiveness.
 
@@ -56,6 +56,29 @@ To run the services in development mode with live reload:
 docker-compose up
 ```
 
+## Silicon Flow Configuration
+
+This project now supports the free Silicon Flow embedding API as the default option. To use Silicon Flow:
+
+1. Visit [Silicon Flow](https://siliconflow.cn/) and create an account
+2. Get your API key from the dashboard
+3. Set the environment variables:
+   ```bash
+   export SILICONFLOW_API_KEY=your_api_key_here
+   # Optional: customize model (default is BAAI/bge-m3)
+   export SILICONFLOW_MODEL=BAAI/bge-large-zh-v1.5
+   ```
+
+**Available Models:**
+- `BAAI/bge-m3` - Multi-language, supports 100+ languages, up to 8192 tokens (default)
+- `BAAI/bge-large-zh-v1.5` - Optimized for Chinese text
+- `BAAI/bge-large-en-v1.5` - Optimized for English text
+
+**Free Tier Benefits:**
+- Free embedding API usage
+- High-quality vectors with competitive performance
+- Support for multiple languages and long texts
+
 ## API Documentation
 
 The API documentation is available at http://localhost:8080/docs when the service is running.
@@ -71,6 +94,9 @@ The following environment variables can be configured in the `docker-compose.yml
 | POSTGRES_USER | PostgreSQL username | postgres |
 | POSTGRES_PASSWORD | PostgreSQL password | postgres |
 | POSTGRES_DB | PostgreSQL database name | postgres |
+| SILICONFLOW_API_KEY | Silicon Flow API key for embeddings | "" |
+| SILICONFLOW_BASE_URL | Silicon Flow API base URL | https://api.siliconflow.cn/v1 |
+| SILICONFLOW_MODEL | Silicon Flow embedding model | BAAI/bge-m3 |
 
 ## License
 

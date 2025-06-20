@@ -1,8 +1,8 @@
-# PGVectorStore Migration Guide
+# AsyncPGVectorStore Migration Guide
 
 ## Overview
 
-This project has been upgraded from the deprecated `PGVector` to the new `PGVectorStore` implementation in langchain-postgres v0.0.14+.
+This project has been upgraded from the deprecated `PGVector` to the new `AsyncPGVectorStore` implementation in langchain-postgres v0.0.14+.
 
 ## Key Changes
 
@@ -12,7 +12,7 @@ This project has been upgraded from the deprecated `PGVector` to the new `PGVect
 
 ### 2. API Changes
 - **Before**: `from langchain_postgres.vectorstores import PGVector`
-- **After**: `from langchain_postgres.vectorstores import PGVectorStore`
+- **After**: `from langchain_postgres import AsyncPGVectorStore`
 - **New**: `from langchain_postgres import PGEngine`
 
 ### 3. Initialization Pattern
@@ -31,7 +31,7 @@ store = PGVector(
 ```python
 engine = PGEngine.from_connection_string(url=connection_string)
 engine.init_vectorstore_table(table_name=collection_name, vector_size=vector_size)
-store = PGVectorStore.create_sync(
+store = AsyncPGVectorStore.create_sync(
     engine=engine,
     table_name=collection_name,
     embedding_service=embeddings,
@@ -69,7 +69,7 @@ POSTGRES_CONNECTION_STRING="postgresql+psycopg://user:pass@host:port/db"
 ## Code Changes Made
 
 ### 1. Updated `ragbackend/database/connection.py`
-- Replaced `PGVector` import with `PGVectorStore`
+- Replaced `PGVector` import with `AsyncPGVectorStore`
 - Added `PGEngine` import
 - Updated `get_vectorstore_engine()` to return `PGEngine`
 - Modified `get_vectorstore()` to use new initialization pattern

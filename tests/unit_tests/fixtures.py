@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from httpx import ASGITransport, AsyncClient
 
 from ragbackend import config
-from ragbackend.database.connection import get_vectorstore_sync
+from ragbackend.database.connection import get_vectorstore
 from ragbackend.server import APP
 
 
@@ -22,7 +22,7 @@ def reset_db() -> None:
             "Please set the host to 'localhost' before running tests."
         )
     # Use the synchronous version for the test setup
-    vectorstore = get_vectorstore_sync()
+    vectorstore = get_vectorstore()
     # Drop table
     vectorstore.drop_tables()
     # Re-create

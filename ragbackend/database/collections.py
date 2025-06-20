@@ -3,7 +3,7 @@
 1. CollectionManager: for managing collections of documents in a database.
 2. Collection: for managing the contents of a specific collection.
 
-The current implementations are based on langchain-postgres PGVectorStore class.
+The current implementations are based on langchain-postgres AsyncPGVectorStore class.
 
 Replace with your own implementation or favorite vectorstore if needed.
 """
@@ -103,11 +103,11 @@ class Collection:
         else:
             # Get all documents with pagination
             # Note: This is a simplified approach, actual implementation may vary
-            # based on the specific PGVectorStore API
+            # based on the specific AsyncPGVectorStore API
             all_docs = []
             try:
                 # Try to use a search with very broad criteria to get all documents
-                # This is a workaround since PGVectorStore might not have a direct "get all" method
+                # This is a workaround since AsyncPGVectorStore might not have a direct "get all" method
                 async with get_db_connection() as conn:
                     table_name = self._details["table_id"]
                     
