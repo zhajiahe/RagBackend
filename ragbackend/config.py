@@ -65,6 +65,11 @@ POSTGRES_PORT = env("POSTGRES_PORT", cast=int, default="5432")
 POSTGRES_USER = env("POSTGRES_USER", cast=str, default="langchain")
 POSTGRES_PASSWORD = env("POSTGRES_PASSWORD", cast=str, default="langchain")
 POSTGRES_DB = env("POSTGRES_DB", cast=str, default="langchain_test")
+print(f"#### POSTGRES_HOST: {POSTGRES_HOST} ####")
+print(f"#### POSTGRES_PORT: {POSTGRES_PORT} ####")
+print(f"#### POSTGRES_USER: {POSTGRES_USER} ####")
+print(f"#### POSTGRES_PASSWORD: {POSTGRES_PASSWORD} ####")
+print(f"#### POSTGRES_DB: {POSTGRES_DB} ####")
 
 # Default Admin User Configuration
 DEFAULT_ADMIN_USERNAME = env("DEFAULT_ADMIN_USERNAME", cast=str, default="admin")
