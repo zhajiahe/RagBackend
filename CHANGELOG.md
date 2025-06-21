@@ -14,6 +14,7 @@
 - 修复CollectionsManager类名不一致导致的导入错误
 - 修复认证测试中JWT token时区和精度问题
 - 修复Docker构建失败问题，优化国内镜像源配置策略，避免502网关错误
+- 修复CollectionsManager.setup()调用方式错误导致的应用启动失败
 
 ## [0.0.1] - 2025-06-20
 

@@ -37,7 +37,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Failed to initialize MinIO service.")
     
     # Setup collections manager
-    await CollectionsManager.setup()
+    collections_manager = CollectionsManager()
+    await collections_manager.setup()
     
     # Create users table
     from ragbackend.database.users import create_users_table, create_default_admin_user
