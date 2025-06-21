@@ -11,7 +11,7 @@ __pycache__/
 
 # Swp files
 *.swp
-
+logs
 # Distribution / packaging
 .Python
 build/

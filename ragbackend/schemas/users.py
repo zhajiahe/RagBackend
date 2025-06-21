@@ -1,9 +1,10 @@
 """User schemas for authentication."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
+from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class UserBase(BaseModel):
@@ -52,4 +53,12 @@ class TokenData(BaseModel):
     """Token data schema."""
     
     username: Optional[str] = None
-    user_id: Optional[str] = None 
+    user_id: Optional[Union[str, UUID]] = None
+
+    @field_validator('user_id')
+    @classmethod
+    def validate_user_id(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v

@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from typing import Annotated
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -26,6 +27,18 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 
 # Note: Table creation will be handled in the main application startup
+
+
+def _convert_db_user_to_response(db_user: dict) -> dict:
+    """Convert database user dict to format suitable for UserResponse."""
+    # Convert UUID objects to strings
+    converted_user = {}
+    for key, value in db_user.items():
+        if isinstance(value, uuid.UUID):
+            converted_user[key] = str(value)
+        else:
+            converted_user[key] = value
+    return converted_user
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -55,7 +68,9 @@ async def register(user: UserCreate):
         full_name=user.full_name
     )
     
-    return UserResponse(**db_user)
+    # Convert UUID objects to strings before creating UserResponse
+    converted_user = _convert_db_user_to_response(db_user)
+    return UserResponse(**converted_user)
 
 
 @router.post("/login", response_model=Token)
@@ -76,13 +91,14 @@ async def login(user_data: UserLogin):
             detail="User account is inactive"
         )
     
-    # Update last login
-    await update_user_last_login(user["id"])
+    # Update last login - convert UUID to string for database operations
+    user_id = str(user["id"]) if isinstance(user["id"], uuid.UUID) else user["id"]
+    await update_user_last_login(user_id)
     
     # Create access token
     access_token_expires = timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["id"], "username": user["username"]},
+        data={"sub": user_id, "username": user["username"]},
         expires_delta=access_token_expires
     )
     
@@ -113,13 +129,14 @@ async def login_for_access_token(
             detail="User account is inactive"
         )
     
-    # Update last login
-    await update_user_last_login(user["id"])
+    # Update last login - convert UUID to string for database operations
+    user_id = str(user["id"]) if isinstance(user["id"], uuid.UUID) else user["id"]
+    await update_user_last_login(user_id)
     
     # Create access token
     access_token_expires = timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["id"], "username": user["username"]},
+        data={"sub": user_id, "username": user["username"]},
         expires_delta=access_token_expires
     )
     

@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, Union
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class DocumentCreate(BaseModel):
@@ -14,12 +15,20 @@ class DocumentUpdate(BaseModel):
 
 
 class DocumentResponse(BaseModel):
-    id: str
-    collection_id: str
+    id: Union[str, UUID]
+    collection_id: Union[str, UUID]
     content: str | None = None
     metadata: dict[str, Any] | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+    @field_validator('id', 'collection_id')
+    @classmethod
+    def validate_uuid_fields(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
 
 class SearchQuery(BaseModel):
@@ -29,7 +38,15 @@ class SearchQuery(BaseModel):
 
 
 class SearchResult(BaseModel):
-    id: str
+    id: Union[str, UUID]
     page_content: str
     metadata: dict[str, Any] | None = None
     score: float
+
+    @field_validator('id')
+    @classmethod
+    def validate_id(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
