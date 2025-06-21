@@ -31,6 +31,10 @@
 - 修复Docker构建失败问题，优化国内镜像源配置策略，避免502网关错误
 - 修复CollectionsManager.setup()调用方式错误导致的应用启动失败
 - 修复JWT token创建时UUID对象JSON序列化错误
+- 修复API 500内部服务器错误：创建main.py入口文件解决模块导入问题
+- 修复Pydantic v2兼容性问题：移除重复的orm_mode配置，使用from_attributes
+- 修复缺失greenlet依赖导致的SQLAlchemy异步操作失败问题
+- 修复集合创建、列表、获取、删除等API端点的500错误，所有API测试现已通过
 
 ## [0.0.1] - 2025-06-20
 
@@ -40,4 +44,4 @@
 - JWT 认证系统
 - RAG 功能支持
 - PostgreSQL 数据库集成
-- MinIO 文件存储 
+- MinIO 文件存储

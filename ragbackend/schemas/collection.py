@@ -1,7 +1,8 @@
 import datetime
-from typing import Any
+from typing import Any, Union
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # =====================
 # Collection Schemas
@@ -31,13 +32,21 @@ class CollectionResponse(BaseModel):
 
     # PGVector table has uuid (id), name (str), and cmetadata (JSONB)
     # We get these from list/get db functions
-    uuid: str = Field(
+    uuid: Union[str, UUID] = Field(
         ..., description="The unique identifier of the collection in PGVector."
     )
     name: str = Field(..., description="The name of the collection.")
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Metadata associated with the collection."
     )
+
+    @field_validator('uuid')
+    @classmethod
+    def validate_uuid(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
     class Config:
         # Allows creating model from dict like
@@ -56,10 +65,18 @@ class DocumentBase(BaseModel):
 
 
 class DocumentCreate(DocumentBase):
-    collection_id: str
+    collection_id: Union[str, UUID]
     embedding: list[float] | None = (
         None  # Embedding can be added during creation or later
     )
+
+    @field_validator('collection_id')
+    @classmethod
+    def validate_collection_id(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
 
 class DocumentUpdate(BaseModel):
@@ -69,12 +86,19 @@ class DocumentUpdate(BaseModel):
 
 
 class DocumentResponse(DocumentBase):
-    id: str
-    collection_id: str
+    id: Union[str, UUID]
+    collection_id: Union[str, UUID]
     embedding: list[float] | None = None  # Represent embedding as list of floats
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
+    @field_validator('id', 'collection_id')
+    @classmethod
+    def validate_uuid_fields(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
+
     class Config:
-        orm_mode = True
         from_attributes = True  # Pydantic v2 way
