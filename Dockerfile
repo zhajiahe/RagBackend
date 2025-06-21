@@ -2,10 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 设置国内镜像源
-RUN echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye main contrib non-free" > /etc/apt/sources.list && \
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-updates main contrib non-free" >> /etc/apt/sources.list && \
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bullseye-security main contrib non-free" >> /etc/apt/sources.list
+# 直接替换默认源，避免初始网络问题
+RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources || \
+    (echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+     echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+     echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list)
 
 # 配置pip国内源
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
@@ -19,10 +20,11 @@ COPY . .
 
 # Install build dependencies and runtime dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc python3-dev libpq-dev && \
-    pip install --no-cache-dir pip -U && \
-    pip install --no-cache-dir hatch && \
-    pip install --no-cache-dir '.[dev]' && \
+    apt-get install -y --no-install-recommends \
+        gcc python3-dev libpq-dev && \
+    pip install --no-cache-dir --timeout=300 --retries=5 pip -U && \
+    pip install --no-cache-dir --timeout=300 --retries=5 hatch && \
+    pip install --no-cache-dir --timeout=300 --retries=5 '.[dev]' && \
     # Purge build-only dependencies
     apt-get purge -y --auto-remove gcc python3-dev && \
     apt-get clean && \
