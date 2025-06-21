@@ -6,7 +6,7 @@ from typing import Any, Optional, Union
 import asyncpg
 import sqlalchemy
 from langchain_core.embeddings import Embeddings
-from langchain_postgres import PGEngine, AsyncPGVectorStore
+from langchain_postgres import PGEngine, PGVectorStore
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -76,8 +76,8 @@ async def get_vectorstore(
     engine: Optional[PGEngine] = None,
     collection_metadata: Optional[dict[str, Any]] = None,
     vector_size: int = 512,
-) -> AsyncPGVectorStore:
-    """Initializes and returns a AsyncPGVectorStore for a specific collection,
+) -> PGVectorStore:
+    """Initializes and returns a PGVectorStore for a specific collection,
     using an existing engine or creating one from connection parameters.
     """
     if engine is None:
@@ -92,8 +92,8 @@ async def get_vectorstore(
         vector_size=vector_size,
     )
 
-    # Create the vectorstore using the new async AsyncPGVectorStore
-    store = await AsyncPGVectorStore.create(
+    # Create the vectorstore using the new async PGVectorStore
+    store = await PGVectorStore.create(
         engine=engine,
         table_name=collection_name,
         embedding_service=embeddings,

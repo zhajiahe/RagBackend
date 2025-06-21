@@ -40,9 +40,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await CollectionsManager.setup()
     
     # Create users table
-    from ragbackend.database.users import create_users_table
+    from ragbackend.database.users import create_users_table, create_default_admin_user
     await create_users_table()
     logger.info("Users table created successfully.")
+    
+    # Create default admin user
+    try:
+        await create_default_admin_user()
+    except Exception as e:
+        logger.error(f"Failed to create default admin user: {e}")
     
     # Create files metadata table
     from ragbackend.database.files import create_files_table

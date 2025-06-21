@@ -9,7 +9,7 @@ RagBackend 是一个基于 FastAPI 和 LangChain 构建的 RAG (Retrieval-Augmen
 - [x] 修改 Supabase 认证，实现本地基于 FastAPI 的 JWT 认证。
 - [x] 默认使用免费的硅基流动（silicon-flow）向量 API。
 - [x] 增加本地对象存储 MinIO。
-- [x] 使用 `langchain_postgres.AsyncPGVectorStore` 替代 `PGVector`。
+- [x] 使用 `langchain_postgres.PGVectorStore` 替代 `PGVector`。
 - [ ] 支持图片编码/检索。
 - [ ] 优化文档处理实现，提高解析效果。
 

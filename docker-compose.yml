@@ -59,8 +59,8 @@ services:
       POSTGRES_DB: postgres
       # Silicon Flow Configuration (uncomment and set your API key)
       # SILICONFLOW_API_KEY: your_siliconflow_api_key_here
-      # SILICONFLOW_BASE_URL: https://api.siliconflow.cn/v1
-      # SILICONFLOW_MODEL: BAAI/bge-m3
+      SILICONFLOW_BASE_URL: https://api.siliconflow.cn/v1
+      SILICONFLOW_MODEL: BAAI/bge-m3
       # MinIO Configuration
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin

@@ -1,11 +1,14 @@
 """User database operations."""
 
 import asyncpg
+import logging
 from datetime import datetime
 from typing import Optional
 import uuid
 
 from ragbackend.database.connection import get_db_connection
+
+logger = logging.getLogger(__name__)
 
 
 async def create_users_table():
@@ -91,4 +94,44 @@ async def update_user_last_login(user_id: str):
             UPDATE users 
             SET updated_at = NOW()
             WHERE id = $1
-        """, user_id) 
+        """, user_id)
+
+
+async def create_default_admin_user():
+    """Create default admin user if it doesn't exist and password is provided."""
+    from ragbackend import config
+    from ragbackend.services.jwt_service import get_password_hash
+    
+    # Skip if no admin password is configured
+    if not config.DEFAULT_ADMIN_PASSWORD:
+        logger.info("No default admin password configured, skipping admin user creation")
+        return
+    
+    try:
+        # Check if admin user already exists
+        existing_user = await get_user_by_username(config.DEFAULT_ADMIN_USERNAME)
+        if existing_user:
+            logger.info(f"Admin user '{config.DEFAULT_ADMIN_USERNAME}' already exists")
+            return
+        
+        # Check if admin email already exists
+        existing_email = await get_user_by_email(config.DEFAULT_ADMIN_EMAIL)
+        if existing_email:
+            logger.warning(f"Email '{config.DEFAULT_ADMIN_EMAIL}' already exists, skipping admin user creation")
+            return
+        
+        # Create admin user
+        hashed_password = get_password_hash(config.DEFAULT_ADMIN_PASSWORD)
+        admin_user = await create_user(
+            email=config.DEFAULT_ADMIN_EMAIL,
+            username=config.DEFAULT_ADMIN_USERNAME,
+            hashed_password=hashed_password,
+            full_name=config.DEFAULT_ADMIN_FULL_NAME
+        )
+        
+        logger.info(f"Default admin user '{config.DEFAULT_ADMIN_USERNAME}' created successfully")
+        return admin_user
+        
+    except Exception as e:
+        logger.error(f"Failed to create default admin user: {e}")
+        raise 

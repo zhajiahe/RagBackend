@@ -9,7 +9,7 @@ RagBackend is a RAG (Retrieval-Augmented Generation) service built with FastAPI 
 - [x] Modify Supabase authentication to implement local FastAPI JWT authentication.
 - [x] Use the free `silicon-flow` embedding API by default.
 - [x] Add local object storage with MinIO.
-- [x] Replace `PGVector` with `langchain_postgres.AsyncPGVectorStore`.
+- [x] Replace `PGVector` with `langchain_postgres.PGVectorStore`.
 - [ ] Support image encoding/retrieval.
 - [ ] Optimize document processing implementation to improve parsing effectiveness.
 

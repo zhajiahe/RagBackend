@@ -3,7 +3,7 @@
 1. CollectionManager: for managing collections of documents in a database.
 2. Collection: for managing the contents of a specific collection.
 
-The current implementations are based on langchain-postgres AsyncPGVectorStore class.
+The current implementations are based on langchain-postgres PGVectorStore class.
 
 Replace with your own implementation or favorite vectorstore if needed.
 """
@@ -64,7 +64,7 @@ class Collection:
     
     async def _load_details(self):
         """Load collection details from database."""
-        manager = CollectionManager()
+        manager = CollectionsManager()
         collection = await manager.get_collection(self.collection_id)
         self._details = collection._details
 
@@ -127,11 +127,11 @@ class Collection:
         else:
             # Get all documents with pagination
             # Note: This is a simplified approach, actual implementation may vary
-            # based on the specific AsyncPGVectorStore API
+            # based on the specific PGVectorStore API
             all_docs = []
             try:
                 # Try to use a search with very broad criteria to get all documents
-                # This is a workaround since AsyncPGVectorStore might not have a direct "get all" method
+                # This is a workaround since PGVectorStore might not have a direct "get all" method
                 async with get_db_connection() as conn:
                     table_name = self._details["table_id"]
                     
@@ -361,11 +361,11 @@ class Collection:
             return []
 
 
-class CollectionManager:
+class CollectionsManager:
     """Manages multiple collections in a database."""
 
     def __init__(self, user_id: Optional[str] = None):
-        """Initialize CollectionManager."""
+        """Initialize CollectionsManager."""
         self.user_id = user_id
 
     async def setup(self):
