@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+import uuid
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -21,9 +22,20 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def _convert_uuid_to_string(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert UUID objects to strings for JSON serialization."""
+    converted = {}
+    for key, value in data.items():
+        if isinstance(value, uuid.UUID):
+            converted[key] = str(value)
+        else:
+            converted[key] = value
+    return converted
+
+
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
-    to_encode = data.copy()
+    to_encode = _convert_uuid_to_string(data.copy())
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
